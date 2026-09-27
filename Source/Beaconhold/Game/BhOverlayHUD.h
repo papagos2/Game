@@ -5,12 +5,12 @@
 #include "CoreMinimal.h"
 #include "GameFramework/HUD.h"
 
-#include "BhHUD.generated.h"
+#include "BhOverlayHUD.generated.h"
 
 class ABhDirector;
 
 UCLASS()
-class ABhHUD : public AHUD
+class ABhOverlayHUD : public AHUD
 {
 	GENERATED_BODY()
 

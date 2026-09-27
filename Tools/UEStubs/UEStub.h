@@ -28,11 +28,13 @@ using int16 = int16_t;
 using uint16 = uint16_t;
 using int32 = int32_t;
 using uint32 = uint32_t;
-using int64 = int64_t;
-using uint64 = uint64_t;
+// As in Unreal: 64-bit integers are long long on every platform (std::int64_t is long on
+// Linux and Android, so mixing the two is caught here as it would be there).
+using int64 = signed long long;
+using uint64 = unsigned long long;
 using TCHAR = char16_t; // UTF-16 as on Android/iOS/Linux
 using ANSICHAR = char;
-using SIZE_T = size_t;
+using SIZE_T = unsigned long long; // UPTRINT on 64-bit platforms
 
 #define TEXT(x) u##x
 #define FORCEINLINE inline
@@ -907,6 +909,11 @@ public:
 	TEnumAsByte(EnumType InValue);
 	TEnumAsByte& operator=(EnumType InValue);
 	operator EnumType() const;
+};
+
+//@section Package: CoreUObject
+class UPackage : public UObject
+{
 };
 
 //@section Modules: Core

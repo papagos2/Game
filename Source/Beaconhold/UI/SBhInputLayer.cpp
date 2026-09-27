@@ -23,12 +23,24 @@ ABhDirector* SBhInputLayer::GetDirector() const
 	return PC != nullptr ? PC->GetDirector() : nullptr;
 }
 
-FVector2D SBhInputLayer::ToPixels(const FGeometry& MyGeometry, const FPointerEvent& Event)
+FVector2D SBhInputLayer::ToPixels(const FGeometry& MyGeometry, const FPointerEvent& Event) const
 {
-	// The layer covers the whole viewport, so local units times the layout scale are
-	// viewport pixels, which is what the camera projection expects.
+	// The layer covers the whole viewport, so a position's fraction of the layer is its fraction
+	// of the viewport. Mapping by fractions (rather than by the DPI scale) stays right when the
+	// viewport renders at another resolution than the window (mobile content scale factor).
 	const FVector2D Local = MyGeometry.AbsoluteToLocal(Event.GetScreenSpacePosition());
-	return Local * MyGeometry.GetAccumulatedLayoutTransform().GetScale();
+	const FVector2D Size = MyGeometry.GetLocalSize();
+	int32 W = 0;
+	int32 H = 0;
+	if (const ABhPlayerController* PC = Owner.Get())
+	{
+		PC->GetViewportSize(W, H);
+	}
+	if (Size.X <= 0.0 || Size.Y <= 0.0 || W <= 0 || H <= 0)
+	{
+		return Local * MyGeometry.GetAccumulatedLayoutTransform().GetScale();
+	}
+	return FVector2D(Local.X / Size.X * static_cast<double>(W), Local.Y / Size.Y * static_cast<double>(H));
 }
 
 FReply SBhInputLayer::OnMouseButtonDown(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent)

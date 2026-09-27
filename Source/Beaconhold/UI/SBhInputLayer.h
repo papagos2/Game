@@ -30,7 +30,7 @@ public:
 
 private:
 	ABhDirector* GetDirector() const;
-	static FVector2D ToPixels(const FGeometry& MyGeometry, const FPointerEvent& Event);
+	FVector2D ToPixels(const FGeometry& MyGeometry, const FPointerEvent& Event) const;
 
 	TWeakObjectPtr<ABhPlayerController> Owner;
 	bool bLeftDown = false;

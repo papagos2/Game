@@ -205,6 +205,64 @@ BH_TEST(Session_TouchFlow_SelectGatherBuild)
 	BH_EXPECT(S.GetControl().GetSelectionKind(W) == SelectionKind::OwnUnits);
 }
 
+BH_TEST(Hud_HotkeysAvoidCameraKeys)
+{
+	// On desktop W, A, S and D pan the camera, so no command may use them as its shortcut, and
+	// no two commands on one card may share a key.
+	Session S;
+	SessionConfig C;
+	C.MissionIndex = 0;
+	std::string Err;
+	BH_EXPECT(S.Start(C, Err));
+	World& W = S.GetWorld();
+	TopDownView V;
+	S.Update(0.05f, &V);
+	const Entity* Keep = FirstOwned(W, Archetype::Keep);
+	BH_EXPECT(Keep != nullptr);
+	if (Keep == nullptr)
+	{
+		return;
+	}
+	std::vector<EntityId> Army;
+	const Archetype Soldiers[] = {Archetype::Shieldbearer, Archetype::Ranger, Archetype::StagRider, Archetype::Sage};
+	for (Archetype A : Soldiers)
+	{
+		Army.push_back(W.SpawnUnit(A, Team::Player, Keep->Pos + Vec2(4.f, 0.f)));
+	}
+	int Checked = 0;
+	auto CheckActions = [&]()
+	{
+		HudModel Hud;
+		BuildHudModel(S, Hud);
+		std::string Used;
+		for (const ActionButton& B : Hud.Actions)
+		{
+			const char K = B.Hotkey;
+			BH_EXPECT_MSG(K != 'W' && K != 'A' && K != 'S' && K != 'D', "'%s' uses %c", B.Label.c_str(), K);
+			// One key, one command: a shared key would only ever reach the first button.
+			BH_EXPECT_MSG(K == 0 || Used.find(K) == std::string::npos, "'%s' repeats %c", B.Label.c_str(), K);
+			Used.push_back(K);
+			++Checked;
+		}
+	};
+	S.GetControl().SelectMany(W, Army); // soldiers: abilities and stop
+	CheckActions();
+	S.GetControl().SelectMany(W, {Keep->Id}); // keep: training
+	CheckActions();
+	const Entity* Worker = FirstOwned(W, Archetype::Lamplighter);
+	BH_EXPECT(Worker != nullptr);
+	if (Worker != nullptr)
+	{
+		S.GetControl().SelectMany(W, {Worker->Id}); // worker: build, gather
+		CheckActions();
+		S.ExecuteAction(ActionId(ActionKind::BuildMenu));
+		CheckActions();
+		S.ExecuteAction(ActionId(ActionKind::PlaceBuilding, static_cast<int>(Archetype::Cottage)));
+		CheckActions(); // placement: confirm, cancel
+	}
+	BH_EXPECT(Checked >= 15);
+}
+
 BH_TEST(Session_CameraPanAndPinch)
 {
 	Session S;

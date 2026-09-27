@@ -13,6 +13,7 @@
 #include "MeshDescription.h"
 #include "StaticMeshAttributes.h"
 #include "TextureResource.h"
+#include "UObject/Package.h"
 
 namespace
 {
@@ -177,7 +178,11 @@ UTexture2D* UBhAssets::CreateTexture(const bh::ImageRGBA& Image, bool bSRGB, boo
 	{
 		return nullptr;
 	}
-	UTexture2D* Texture = UTexture2D::CreateTransient(Image.W, Image.H, PF_B8G8R8A8, Name);
+	// Unique names: creating an object under the name of a live one would replace it in place
+	// (a new minimap per mission while the old one is still on screen; a second play session in
+	// the editor while the first one's textures await garbage collection).
+	const FName UniqueName = MakeUniqueObjectName(GetTransientPackage(), UTexture2D::StaticClass(), Name);
+	UTexture2D* Texture = UTexture2D::CreateTransient(Image.W, Image.H, PF_B8G8R8A8, UniqueName);
 	if (Texture == nullptr)
 	{
 		return nullptr;

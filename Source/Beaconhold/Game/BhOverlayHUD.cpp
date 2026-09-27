@@ -1,5 +1,5 @@
 // Beaconhold - world-space overlays.
-#include "Game/BhHUD.h"
+#include "Game/BhOverlayHUD.h"
 
 #include "Game/BhCommon.h"
 #include "Game/BhDirector.h"
@@ -32,13 +32,13 @@ FLinearColor HudHealthColor(float Ratio, bh::Team Owner)
 }
 } // namespace
 
-ABhDirector* ABhHUD::FindDirector() const
+ABhDirector* ABhOverlayHUD::FindDirector() const
 {
 	const ABhPlayerController* PC = Cast<ABhPlayerController>(PlayerOwner);
 	return PC != nullptr ? PC->GetDirector() : nullptr;
 }
 
-void ABhHUD::DrawHUD()
+void ABhOverlayHUD::DrawHUD()
 {
 	Super::DrawHUD();
 	ABhDirector* D = FindDirector();
@@ -53,7 +53,7 @@ void ABhHUD::DrawHUD()
 	DrawSelectionBox(*D, Scale);
 }
 
-void ABhHUD::DrawBars(ABhDirector& D, float Scale)
+void ABhOverlayHUD::DrawBars(ABhDirector& D, float Scale)
 {
 	bool bShowAll = false;
 	if (const UBhGameInstance* GI = GetGameInstance<UBhGameInstance>())
@@ -90,7 +90,7 @@ void ABhHUD::DrawBars(ABhDirector& D, float Scale)
 	}
 }
 
-void ABhHUD::DrawFloatTexts(ABhDirector& D, float Scale)
+void ABhOverlayHUD::DrawFloatTexts(ABhDirector& D, float Scale)
 {
 	UFont* Font = GEngine != nullptr ? GEngine->GetMediumFont() : nullptr;
 	if (Font == nullptr)
@@ -115,7 +115,7 @@ void ABhHUD::DrawFloatTexts(ABhDirector& D, float Scale)
 	}
 }
 
-void ABhHUD::DrawTutorialPointer(ABhDirector& D, float Scale)
+void ABhOverlayHUD::DrawTutorialPointer(ABhDirector& D, float Scale)
 {
 	FVector Top;
 	if (!D.GetTutorialMarker(Top))
@@ -146,7 +146,7 @@ void ABhHUD::DrawTutorialPointer(ABhDirector& D, float Scale)
 	}
 }
 
-void ABhHUD::DrawSelectionBox(ABhDirector& D, float Scale)
+void ABhOverlayHUD::DrawSelectionBox(ABhDirector& D, float Scale)
 {
 	FVector2D Min;
 	FVector2D Max;

@@ -75,6 +75,7 @@ ENGINE_HEADERS = {
     "Templates/Function.h": ["Core"],
     "TextureResource.h": ["TextureResource"],
     "UObject/Object.h": ["CoreUObject"],
+    "UObject/Package.h": ["Package"],
     "UObject/SoftObjectPtr.h": ["CoreUObject"],
     "Widgets/Images/SImage.h": ["SImage"],
     "Widgets/Input/SButton.h": ["SButton"],
@@ -179,6 +180,17 @@ def main():
 
     errors = []
     sources = []
+    # Windows and macOS ignore case: two files whose names differ only in case would let a quoted
+    # include find the wrong one (it searches the including file's folder first) and would give
+    # two object files the same name.
+    seen = {}
+    for folder, _, files in os.walk(source):
+        for name in files:
+            if name.endswith((".h", ".cpp")):
+                seen.setdefault(name.lower(), []).append(os.path.relpath(os.path.join(folder, name), source))
+    for paths in seen.values():
+        if len(paths) > 1:
+            errors.append("file names differ only in case: " + ", ".join(sorted(paths)))
     for folder in ("Game", "UI"):
         for name in sorted(os.listdir(os.path.join(copy, folder))):
             path = os.path.join(copy, folder, name)
@@ -222,12 +234,15 @@ def main():
     if wanted:
         sources = [s for s in sources if any(s[0].endswith(w) or w.endswith(s[0]) for w in wanted)]
 
-    flags = [
-        "clang++", "-fsyntax-only", "-std=c++20", "-fno-exceptions", "-fno-rtti",
-        "-Wall", "-Wextra", "-Wshadow", "-Wno-unused-parameter", "-Wno-unused-private-field",
-        "-ferror-limit=50", "-fno-caret-diagnostics",
-        "-I", os.path.join(build, "stub"), "-I", shims, "-I", copy, "-I", os.path.join(copy, "Sim"),
-    ]
+    # clang by default; CXX=g++ adds GCC's -Wshadow, which (like MSVC, where Unreal makes
+    # shadowing an error) also flags parameters named like a member of their class.
+    compiler = os.environ.get("CXX", "clang++")
+    includes = ["-I", os.path.join(build, "stub"), "-I", shims, "-I", copy, "-I", os.path.join(copy, "Sim")]
+    common = ["-fsyntax-only", "-std=c++20", "-fno-exceptions", "-fno-rtti", "-Wall", "-Wextra", "-Wno-unused-parameter"]
+    if "clang" in compiler:
+        flags = [compiler] + common + ["-Wshadow-all", "-Wno-unused-private-field", "-ferror-limit=50", "-fno-caret-diagnostics"] + includes
+    else:
+        flags = [compiler] + common + ["-Wshadow", "-fmax-errors=50", "-fno-diagnostics-show-caret"] + includes
     failed = 0
     for label, path in sources:
         result = subprocess.run(flags + [path], capture_output=True, text=True)

@@ -66,6 +66,8 @@ class UBhSynthWave : public USoundWaveProcedural
 public:
 	UBhSynthWave(const FObjectInitializer& ObjectInitializer);
 
+	// Set once on the game thread before the wave starts playing, then only read (by the audio
+	// thread); never reset while the wave may be rendering.
 	TSharedPtr<FBhMixer, ESPMode::ThreadSafe> Mixer;
 
 protected:

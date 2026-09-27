@@ -2,7 +2,7 @@
 #include "Game/BhGameMode.h"
 
 #include "Game/BhDirector.h"
-#include "Game/BhHUD.h"
+#include "Game/BhOverlayHUD.h"
 #include "Game/BhPlayerController.h"
 
 #include "Engine/World.h"
@@ -11,7 +11,7 @@ ABhGameMode::ABhGameMode()
 {
 	DefaultPawnClass = nullptr;
 	PlayerControllerClass = ABhPlayerController::StaticClass();
-	HUDClass = ABhHUD::StaticClass();
+	HUDClass = ABhOverlayHUD::StaticClass();
 }
 
 ABhDirector* ABhGameMode::GetDirector()

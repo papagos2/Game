@@ -131,6 +131,9 @@ public:
 	void SetVolumes(float Music, float Effects);
 
 private:
+	// Content, views and audio. Runs from BeginPlay, or earlier if a session is requested first:
+	// the controller asks for the menu backdrop from its own BeginPlay, which can come before ours.
+	void EnsureInitialized();
 	void BeginSession(TUniquePtr<bh::Session> NewSession, EBhDirectorMode NewMode);
 	void EndSession();
 	void HandleEvent(const bh::GameEvent& E);
@@ -160,8 +163,10 @@ private:
 	UPROPERTY()
 	TObjectPtr<UTexture2D> MinimapTexture;
 
+	// Minimaps of the last sessions. The HUD's brush can still point at one of them (it only
+	// switches when it next ticks, and it does not tick while hidden in the menus).
 	UPROPERTY()
-	TObjectPtr<UTexture2D> RetiredMinimap;
+	TArray<TObjectPtr<UTexture2D>> RetiredMinimaps;
 
 	UPROPERTY()
 	TObjectPtr<UBhAssets> Assets;
@@ -194,6 +199,7 @@ private:
 	float BattleTimer = 0.f;
 	float MusicVolume = 0.6f;
 	float EffectsVolume = 0.9f;
+	bool bInitialized = false;
 	bool bEndHandled = false;
 	bool bSummaryPending = false;
 	bh::MissionSummary Summary;

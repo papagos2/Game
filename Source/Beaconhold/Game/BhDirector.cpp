@@ -130,6 +130,16 @@ ABhDirector::ABhDirector()
 void ABhDirector::BeginPlay()
 {
 	Super::BeginPlay();
+	EnsureInitialized();
+}
+
+void ABhDirector::EnsureInitialized()
+{
+	if (bInitialized)
+	{
+		return;
+	}
+	bInitialized = true;
 	if (UBhGameInstance* GI = GetGameInstance<UBhGameInstance>())
 	{
 		Assets = GI->GetAssets();
@@ -176,13 +186,11 @@ void ABhDirector::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		}
 	}
 	EndSession();
+	// The audio thread can still be inside the wave for a moment after Stop(). The wave keeps its
+	// own reference to the mixer until the engine destroys it, so nothing is freed under it.
 	if (AudioComponent != nullptr)
 	{
 		AudioComponent->Stop();
-	}
-	if (SynthWave != nullptr)
-	{
-		SynthWave->Mixer.Reset();
 	}
 	Super::EndPlay(EndPlayReason);
 }
@@ -196,6 +204,7 @@ void ABhDirector::SetController(APlayerController* Controller)
 
 void ABhDirector::BeginSession(TUniquePtr<bh::Session> NewSession, EBhDirectorMode NewMode)
 {
+	EnsureInitialized();
 	EndSession();
 	Session = MoveTemp(NewSession);
 	Mode = NewMode;
@@ -233,8 +242,14 @@ void ABhDirector::EndSession()
 	Fx.Clear();
 	Session.Reset();
 	Mode = EBhDirectorMode::None;
-	// The UI may still draw the old minimap this frame: keep it alive until the next change.
-	RetiredMinimap = MinimapTexture;
+	if (MinimapTexture != nullptr)
+	{
+		RetiredMinimaps.Add(MinimapTexture);
+		while (RetiredMinimaps.Num() > 3)
+		{
+			RetiredMinimaps.RemoveAt(0);
+		}
+	}
 	MinimapTexture = nullptr;
 }
 

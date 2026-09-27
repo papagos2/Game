@@ -1020,7 +1020,7 @@ void PlayerControl::BuildActions(const World& W, std::vector<ActionButton>& Out)
 			Stop.IconId = Icon::Stop;
 			Stop.Label = "Stop";
 			Stop.Tooltip = "Stop and hold here";
-			Stop.Hotkey = 'S';
+			Stop.Hotkey = 'T'; // not S: W, A, S and D pan the camera on desktop
 			Out.push_back(Stop);
 			break;
 		}
