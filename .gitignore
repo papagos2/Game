@@ -1,0 +1,47 @@
+# Unreal Engine generated folders
+Binaries/
+Intermediate/
+Saved/
+DerivedDataCache/
+Build/Android/
+Build/IOS/
+Build/Windows/
+Build/Mac/
+Build/Linux/
+Build/*/Build/
+Plugins/*/Binaries/
+Plugins/*/Intermediate/
+
+# IDE / project files (regenerate with "Generate Project Files")
+.vs/
+.vscode/
+.idea/
+*.sln
+*.suo
+*.opensdf
+*.sdf
+*.VC.db
+*.VC.opendb
+*.xcworkspace
+*.xcodeproj
+Beaconhold.code-workspace
+compile_commands.json
+
+# Packaged builds
+Packaged/
+*.apk
+*.aab
+*.ipa
+*.obb
+
+# Local tool output
+Tools/SimTests/build*/
+Tools/Preview/out/
+Tools/Preview/node_modules/
+Tools/UEStubs/build/
+*.o
+*.obj
+
+# OS
+.DS_Store
+Thumbs.db
