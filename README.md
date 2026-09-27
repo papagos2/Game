@@ -27,8 +27,10 @@ need a short round of fixes; see [If something goes wrong](#if-something-goes-wr
 - **Windows:** Visual Studio 2022 or newer with the *Game development with C++* workload
   (Epic's "Setting up Visual Studio" page lists the exact components for your engine version).
   **Mac:** Xcode.
-- **Android builds:** Android Studio, SDK and NDK installed as described in Epic's
-  "Set up Android SDK, NDK and Android Studio" page for your engine version.
+- **Android builds:** in the Epic Games Launcher, open *Options* for your engine version and
+  tick the *Android* target platform (and *iOS* for iPhone builds). Then install Android Studio,
+  the SDK and the NDK as described in Epic's "Set up Android SDK, NDK and Android Studio" page
+  for your engine version.
 - **iOS builds:** a Mac with Xcode and an Apple Developer account.
 
 ## First run on a computer
