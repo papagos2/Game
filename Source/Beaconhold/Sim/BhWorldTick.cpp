@@ -539,7 +539,7 @@ void World::ResolveStrike(Entity& E)
 	const Vec2 ImpactPos = T->Pos;
 	const Team TargetOwner = T->Owner;
 	const EntityId TargetId = T->Id;
-	ApplyDamage(*T, Dmg, E.Id, E.Owner, D.BuildingDamageMult);
+	ApplyDamage(*T, Dmg, E.Id, E.Owner, D.BuildingDamageMult, E.Type);
 	if (D.Splash > 0.f)
 	{
 		std::vector<EntityId> Near;
@@ -549,7 +549,7 @@ void World::ResolveStrike(Entity& E)
 			Entity* S = Find(Id);
 			if (S != nullptr && S->bAlive && Id != TargetId && S->Owner == TargetOwner)
 			{
-				ApplyDamage(*S, Dmg * 0.6f, E.Id, E.Owner, D.BuildingDamageMult);
+				ApplyDamage(*S, Dmg * 0.6f, E.Id, E.Owner, D.BuildingDamageMult, E.Type);
 			}
 		}
 	}
@@ -649,7 +649,7 @@ void World::AssistAllies(const Entity& Victim, EntityId Attacker)
 // Damage
 // ---------------------------------------------------------------------------------------------
 
-void World::ApplyDamage(Entity& Target, float Amount, EntityId SourceId, Team SourceTeam, float BuildingMult)
+void World::ApplyDamage(Entity& Target, float Amount, EntityId SourceId, Team SourceTeam, float BuildingMult, Archetype SourceType)
 {
 	if (!Target.bAlive || Target.IsResourceNode())
 	{
@@ -678,6 +678,7 @@ void World::ApplyDamage(Entity& Target, float Amount, EntityId SourceId, Team So
 	Ev.Owner = Target.Owner;
 	Ev.Pos = Target.Pos;
 	Ev.Value = Dmg;
+	Ev.Sub = static_cast<int>(SourceType);
 	Emit(Ev);
 
 	if (Target.Owner == Team::Player && SourceTeam == Team::Enemy)
@@ -1304,7 +1305,7 @@ void World::UpdateProjectiles(float Dt)
 				const Team Victims = T->Owner;
 				const EntityId TargetId = T->Id;
 				const Vec2 Impact = T->Pos;
-				ApplyDamage(*T, P.Damage, P.Source, P.Owner, P.BuildingMult);
+				ApplyDamage(*T, P.Damage, P.Source, P.Owner, P.BuildingMult, P.SourceType);
 				if (P.Splash > 0.f)
 				{
 					std::vector<EntityId> Near;
@@ -1314,7 +1315,7 @@ void World::UpdateProjectiles(float Dt)
 						Entity* S = Find(Id);
 						if (S != nullptr && S->bAlive && Id != TargetId && S->Owner == Victims)
 						{
-							ApplyDamage(*S, P.Damage * 0.6f, P.Source, P.Owner, P.BuildingMult);
+							ApplyDamage(*S, P.Damage * 0.6f, P.Source, P.Owner, P.BuildingMult, P.SourceType);
 						}
 					}
 				}

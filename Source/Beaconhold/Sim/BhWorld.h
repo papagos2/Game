@@ -390,7 +390,7 @@ private:
 	void FaceTowards(Entity& E, const Vec2& Point, float Dt);
 
 	// Damage
-	void ApplyDamage(Entity& Target, float Amount, EntityId SourceId, Team SourceTeam, float BuildingMult);
+	void ApplyDamage(Entity& Target, float Amount, EntityId SourceId, Team SourceTeam, float BuildingMult, Archetype SourceType);
 	void Heal(Entity& Target, float Amount, EntityId SourceId);
 	void DestroyEntity(Entity& E, EntityId Killer);
 

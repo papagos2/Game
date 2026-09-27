@@ -31,3 +31,9 @@ add_executable(bhexport ${EXPORT_SOURCES})
 target_link_libraries(bhexport PRIVATE bhsim)
 target_include_directories(bhexport PRIVATE ${SIM_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_compile_options(bhexport PRIVATE ${STRICT_FLAGS})
+
+# Icon contact sheet (review the procedural icon set).
+add_executable(bhicons ${CMAKE_CURRENT_SOURCE_DIR}/icons/ExportIcons.cpp)
+target_link_libraries(bhicons PRIVATE bhsim)
+target_include_directories(bhicons PRIVATE ${SIM_DIR})
+target_compile_options(bhicons PRIVATE ${STRICT_FLAGS})

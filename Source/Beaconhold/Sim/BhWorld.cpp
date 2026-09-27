@@ -1275,6 +1275,7 @@ int World::CmdAbility(const std::vector<EntityId>& Units, Ability A)
 			const Vec2 Center = E->Pos;
 			const Team Owner = E->Owner;
 			const EntityId CasterId = E->Id;
+			const Archetype CasterType = E->Type;
 			const float Damage = AD.Amount * GetTeam(Owner).DamageMult;
 			QueryRadius(Center, AD.Radius, Near);
 			for (EntityId TargetId : Near)
@@ -1286,7 +1287,7 @@ int World::CmdAbility(const std::vector<EntityId>& Units, Ability A)
 				}
 				if (AreEnemies(Owner, T->Owner))
 				{
-					ApplyDamage(*T, Damage, CasterId, Owner, 1.f);
+					ApplyDamage(*T, Damage, CasterId, Owner, 1.f, CasterType);
 				}
 				else if (T->Owner == Owner)
 				{
