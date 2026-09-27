@@ -11,7 +11,7 @@ struct CameraRig
 	// Fixed view setup (degrees). Yaw -90 looks "north" (towards -Y), so map rows read top-down.
 	float Pitch = 56.f;
 	float Yaw = -90.f;
-	float Fov = 40.f;
+	float Fov = 55.f; // horizontal FOV at 16:9; vertical extent is kept constant (MaintainYFOV)
 	float MinDistance = 11.f;
 	float MaxDistance = 36.f;
 

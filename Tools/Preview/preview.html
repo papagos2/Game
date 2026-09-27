@@ -1,0 +1,191 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Beaconhold Preview</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #1d2a1f; overflow: hidden; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<script type="module">
+import * as THREE from './node_modules/three/build/three.module.js';
+
+// ---------------------------------------------------------------------------------------------
+// Unreal conventions: X forward, Y right, Z up (left-handed), FRotator(Pitch, Yaw, Roll).
+// Three.js: x right, y up, z towards viewer (right-handed). We map UE (X, Y, Z) -> three (X, Z, Y).
+// ---------------------------------------------------------------------------------------------
+const DEG = Math.PI / 180;
+function rotRows(pitch, yaw, roll) {
+  const SP = Math.sin(pitch * DEG), CP = Math.cos(pitch * DEG);
+  const SY = Math.sin(yaw * DEG), CY = Math.cos(yaw * DEG);
+  const SR = Math.sin(roll * DEG), CR = Math.cos(roll * DEG);
+  return [
+    [CP * CY, CP * SY, SP],
+    [SR * SP * CY - CR * SY, SR * SP * SY + CR * CY, -SR * CP],
+    [-(CR * SP * CY + SR * SY), CY * SR - CR * SP * SY, CR * CP],
+  ];
+}
+function mulRows(a, b) { // row-vector convention: v * a * b
+  const r = [[0,0,0],[0,0,0],[0,0,0]];
+  for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++)
+    r[i][j] = a[i][0] * b[0][j] + a[i][1] * b[1][j] + a[i][2] * b[2][j];
+  return r;
+}
+function ueToThree(v) { return new THREE.Vector3(v[0], v[2], v[1]); }
+
+const geoms = {
+  cube: new THREE.BoxGeometry(1, 1, 1),
+  cyl: new THREE.CylinderGeometry(0.5, 0.5, 1, 20),
+  sphere: new THREE.SphereGeometry(0.5, 20, 14),
+  cone: new THREE.ConeGeometry(0.5, 1, 20),
+  plane: new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2),
+};
+const matCache = new Map();
+function material(c, unlit) {
+  const key = c.join(',') + (unlit ? 'u' : 'l');
+  if (!matCache.has(key)) {
+    const color = new THREE.Color().setRGB(c[0] / 255, c[1] / 255, c[2] / 255, THREE.SRGBColorSpace);
+    matCache.set(key, unlit ? new THREE.MeshBasicMaterial({ color })
+                            : new THREE.MeshStandardMaterial({ color, roughness: 0.82, metalness: 0.0 }));
+  }
+  return matCache.get(key);
+}
+
+// Places a primitive part (UE local frame) into the scene given the owner's world transform.
+function addPart(group, part, ownerPos, ownerYawDeg, ownerScale) {
+  const partRot = rotRows(part.p || 0, part.yw || 0, part.r || 0);
+  const ownerRot = rotRows(0, ownerYawDeg, 0);
+  const R = mulRows(partRot, ownerRot);
+  const off = [part.x * ownerScale, part.y * ownerScale, part.z * ownerScale];
+  const offWorld = [
+    off[0] * ownerRot[0][0] + off[1] * ownerRot[1][0] + off[2] * ownerRot[2][0],
+    off[0] * ownerRot[0][1] + off[1] * ownerRot[1][1] + off[2] * ownerRot[2][1],
+    off[0] * ownerRot[0][2] + off[1] * ownerRot[1][2] + off[2] * ownerRot[2][2],
+  ];
+  const pos = [ownerPos[0] + offWorld[0], ownerPos[1] + offWorld[1], ownerPos[2] + offWorld[2]];
+  const mesh = new THREE.Mesh(geoms[part.s], material(part.c, part.u));
+  const m = new THREE.Matrix4().makeBasis(ueToThree(R[0]), ueToThree(R[2]), ueToThree(R[1]));
+  m.scale(new THREE.Vector3(part.sx * ownerScale, part.sz * ownerScale, part.sy * ownerScale));
+  m.setPosition(ueToThree(pos));
+  mesh.matrixAutoUpdate = false;
+  mesh.matrix.copy(m);
+  mesh.castShadow = !part.u;
+  mesh.receiveShadow = !part.u;
+  group.add(mesh);
+  return mesh;
+}
+
+function addModel(group, model, pos, yawDeg, scale, opts = {}) {
+  for (const part of model.parts) {
+    if (part.role === 7 && opts.carry !== 1) continue; // CarrySunstone
+    if (part.role === 8 && opts.carry !== 2) continue; // CarryTimber
+    addPart(group, part, pos, yawDeg, scale);
+  }
+  if (opts.shadow) {
+    const r = model.shadow * scale;
+    const blob = new THREE.Mesh(new THREE.CircleGeometry(r, 24).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28, depthWrite: false }));
+    blob.position.set(pos[0], 0.012, pos[1]);
+    group.add(blob);
+  }
+}
+
+async function main() {
+  const params = new URLSearchParams(location.search);
+  const scene = new THREE.Scene();
+  const data = await (await fetch(params.get('scene') || 'out/scene.json')).json();
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
+  document.body.appendChild(renderer.domElement);
+  scene.background = new THREE.Color(0x9fc3e0);
+  scene.fog = new THREE.Fog(0x9fc3e0, 40, 95);
+
+  // Sun: UE rotator (Pitch -48, Yaw -60) -> direction the light travels.
+  const sunDir = rotRows(-48, -60, 0)[0];
+  const sun = new THREE.DirectionalLight(0xfff1d6, 2.6);
+  const cam = data.camera;
+  const target = new THREE.Vector3(cam.fx, 0, cam.fy);
+  sun.position.copy(target).sub(ueToThree(sunDir).multiplyScalar(40));
+  sun.target.position.copy(target);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(4096, 4096);
+  const S = 36;
+  Object.assign(sun.shadow.camera, { left: -S, right: S, top: S, bottom: -S, near: 1, far: 120 });
+  sun.shadow.bias = -0.0008;
+  scene.add(sun, sun.target);
+  scene.add(new THREE.HemisphereLight(0xcfe3ff, 0x5c4a36, 1.1));
+
+  const world = new THREE.Group();
+  scene.add(world);
+
+  // Skirt around the map
+  const skirt = new THREE.Mesh(new THREE.BoxGeometry(data.w + 80, 0.1, data.h + 80), material([44, 74, 46], false));
+  skirt.position.set(data.w / 2, -0.3, data.h / 2);
+  skirt.receiveShadow = true;
+  world.add(skirt);
+
+  // Ground cells
+  const cellGeo = new THREE.BoxGeometry(1, 0.2, 1);
+  const cellMat = new THREE.MeshStandardMaterial({ roughness: 0.95, metalness: 0 });
+  const cells = new THREE.InstancedMesh(cellGeo, cellMat, data.cells.length);
+  cells.receiveShadow = true;
+  const m4 = new THREE.Matrix4();
+  const col = new THREE.Color();
+  data.cells.forEach((c, i) => {
+    m4.makeScale(c[2], 1, c[2]).setPosition(c[0], c[3] - 0.1, c[1]);
+    cells.setMatrixAt(i, m4);
+    const gc = data.groundColors[c[4]];
+    cells.setColorAt(i, col.setRGB(gc[0] / 255, gc[1] / 255, gc[2] / 255, THREE.SRGBColorSpace));
+  });
+  world.add(cells);
+
+  for (const t of data.trees) addModel(world, data.treeModels[t[0]], [t[1], t[2], 0], t[3], t[4]);
+  for (const r of data.ruins) addModel(world, data.ruinModel, [r[0], r[1], 0], 0, 1);
+  for (const p of data.props) addPart(world, p, [0, 0, 0], 0, 1);
+
+  if (params.get('lineup')) {
+    // Every model in a row for design review.
+    const lp = params.get('lineup');
+    const order = lp === 'units' ? [0,1,2,3,4,5,6,7,8] : lp.split(',').map(Number);
+    let x = cam.fx - (lp === 'units' ? 5.2 : order.reduce((a, i) => a + (i >= 9 ? [4,2,2,3,3,3,3,2,2,4,3,3,2,2][i - 9] : 1) + 0.9, 0) / 2);
+    for (const a of order) {
+      const team = a >= 5 && a <= 8 || a >= 18 && a <= 21 ? '2' : (a === 22 ? '0' : '1');
+      const model = data.models[a][team];
+      const fp = a >= 9 ? [4,2,2,3,3,3,3,2,2,4,3,3,2,2][a - 9] : 1;
+      x += fp * 0.5 + 0.45;
+      addModel(world, model, [x, cam.fy, 0], 90, model.scale, { shadow: a < 9 });
+      x += fp * 0.5 + 0.45;
+    }
+  } else {
+    for (const e of data.entities) {
+      const model = data.models[e.a][e.team];
+      const yaw = e.f / DEG;
+      const isBuilding = e.a >= 9 && e.a <= 21;
+      const scale = model.scale;
+      addModel(world, model, [e.x, e.y, 0], isBuilding ? 90 : yaw, scale, { shadow: !isBuilding, carry: e.carry });
+    }
+  }
+
+  // Camera: UE rotator(pitch=-Pitch, yaw) forward; location = focus - forward * dist.
+  const fwd = rotRows(-cam.pitch, cam.yaw, 0)[0];
+  const camPos = [cam.fx - fwd[0] * cam.dist, cam.fy - fwd[1] * cam.dist, -fwd[2] * cam.dist];
+  const vfov = 2 * Math.atan(Math.tan(cam.fov * DEG / 2) / (16 / 9)) / DEG;
+  const camera = new THREE.PerspectiveCamera(vfov, window.innerWidth / window.innerHeight, 0.5, 300);
+  camera.position.copy(ueToThree(camPos));
+  camera.up.set(0, 1, 0);
+  camera.lookAt(target);
+  renderer.render(scene, camera);
+  document.title = 'ready';
+}
+main().catch(e => { document.title = 'error: ' + e.message; console.error(e); });
+</script>
+</body>
+</html>

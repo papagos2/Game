@@ -45,3 +45,4 @@ Tools/UEStubs/build/
 # OS
 .DS_Store
 Thumbs.db
+Tools/Preview/package-lock.json

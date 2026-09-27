@@ -24,3 +24,10 @@ add_executable(bhtests ${TEST_SOURCES})
 target_link_libraries(bhtests PRIVATE bhsim)
 target_include_directories(bhtests PRIVATE ${SIM_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_compile_options(bhtests PRIVATE ${STRICT_FLAGS})
+
+# Scene exporter used by the visual preview (Tools/Preview).
+file(GLOB EXPORT_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/export/*.cpp ${CMAKE_CURRENT_SOURCE_DIR}/src/Bot.cpp)
+add_executable(bhexport ${EXPORT_SOURCES})
+target_link_libraries(bhexport PRIVATE bhsim)
+target_include_directories(bhexport PRIVATE ${SIM_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_compile_options(bhexport PRIVATE ${STRICT_FLAGS})
