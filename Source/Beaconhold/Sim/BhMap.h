@@ -86,6 +86,20 @@ public:
 	const std::vector<MapTile>& GetTiles() const { return Tiles; }
 	std::vector<MapTile>& GetTilesMutable() { return Tiles; }
 
+	// Replaces the whole grid (used when loading a saved session).
+	bool Assign(int InWidth, int InHeight, const std::vector<MapTile>& InTiles)
+	{
+		if (InWidth <= 0 || InHeight <= 0 || static_cast<int>(InTiles.size()) != InWidth * InHeight)
+		{
+			return false;
+		}
+		Width = InWidth;
+		Height = InHeight;
+		Tiles = InTiles;
+		++Revision;
+		return true;
+	}
+
 private:
 	int Width = 0;
 	int Height = 0;

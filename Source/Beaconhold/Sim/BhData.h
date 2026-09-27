@@ -95,6 +95,11 @@ const AbilityDef& GetAbilityDef(Ability A);
 const BoonDef& GetBoonDef(Boon B);
 const char* GetResourceName(Resource R);
 
+// Stable identifiers (enum names) used by tutorial highlights, save data and logs.
+const char* ArchetypeKey(Archetype A);
+const char* ResearchKey(Research R);
+const char* AbilityKey(Ability A);
+
 inline bool IsUnit(Archetype A) { return A != Archetype::None && A < Archetype::Count && GetDef(A).Kind == EntityKind::Unit; }
 inline bool IsBuilding(Archetype A) { return A != Archetype::None && A < Archetype::Count && GetDef(A).Kind == EntityKind::Building; }
 

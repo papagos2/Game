@@ -604,6 +604,72 @@ const BoonDef& GetBoonDef(Boon B)
 	return Table[static_cast<size_t>(Index >= 0 && Index < NumBoons ? Index : 0)];
 }
 
+const char* ArchetypeKey(Archetype A)
+{
+	switch (A)
+	{
+	case Archetype::Lamplighter: return "Lamplighter";
+	case Archetype::Shieldbearer: return "Shieldbearer";
+	case Archetype::Ranger: return "Ranger";
+	case Archetype::StagRider: return "StagRider";
+	case Archetype::Sage: return "Sage";
+	case Archetype::Gloomling: return "Gloomling";
+	case Archetype::Thornback: return "Thornback";
+	case Archetype::Hexer: return "Hexer";
+	case Archetype::BogTitan: return "BogTitan";
+	case Archetype::Keep: return "Keep";
+	case Archetype::Cottage: return "Cottage";
+	case Archetype::Storehouse: return "Storehouse";
+	case Archetype::Barracks: return "Barracks";
+	case Archetype::Forge: return "Forge";
+	case Archetype::StagLodge: return "StagLodge";
+	case Archetype::Sanctum: return "Sanctum";
+	case Archetype::Watchtower: return "Watchtower";
+	case Archetype::Beacon: return "Beacon";
+	case Archetype::GloamHeart: return "GloamHeart";
+	case Archetype::Burrow: return "Burrow";
+	case Archetype::Hexroot: return "Hexroot";
+	case Archetype::ThornSpire: return "ThornSpire";
+	case Archetype::SunstoneNode: return "SunstoneNode";
+	case Archetype::Count:
+	case Archetype::None:
+		break;
+	}
+	return "None";
+}
+
+const char* ResearchKey(Research R)
+{
+	switch (R)
+	{
+	case Research::Blades1: return "Blades1";
+	case Research::Blades2: return "Blades2";
+	case Research::Plate1: return "Plate1";
+	case Research::Plate2: return "Plate2";
+	case Research::Fletching: return "Fletching";
+	case Research::LanternWisdom: return "LanternWisdom";
+	case Research::Count:
+	case Research::None:
+		break;
+	}
+	return "None";
+}
+
+const char* AbilityKey(Ability A)
+{
+	switch (A)
+	{
+	case Ability::Brace: return "Brace";
+	case Ability::Volley: return "Volley";
+	case Ability::Charge: return "Charge";
+	case Ability::Sunburst: return "Sunburst";
+	case Ability::None:
+	case Ability::Count:
+		break;
+	}
+	return "None";
+}
+
 const char* GetResourceName(Resource R)
 {
 	switch (R)

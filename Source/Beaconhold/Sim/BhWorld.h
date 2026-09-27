@@ -286,6 +286,7 @@ public:
 	const TeamState& GetTeam(Team T) const { return Teams[TeamIndex(T)]; }
 	float GetTime() const { return Time; }
 	Rng& GetRng() { return Random; }
+	uint32_t GetRngState() const { return Random.GetState(); }
 	GameMap& GetMap() { return Map; }
 	const GameMap& GetMap() const { return Map; }
 
