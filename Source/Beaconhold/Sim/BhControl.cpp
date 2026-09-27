@@ -914,9 +914,9 @@ void PlayerControl::BuildActions(const World& W, std::vector<ActionButton>& Out)
 			const bool bWorkers = HasWorkers(W);
 			if (bWorkers && bBuildMenu)
 			{
-				for (int I = 0; I < BuildMenuCount; ++I)
+				for (int I = 0; I < BuildableStructureCount; ++I)
 				{
-					const Archetype A = BuildMenu[I];
+					const Archetype A = BuildableStructures[I];
 					const ArchetypeDef& D = GetDef(A);
 					ActionButton B;
 					B.Id = ActionId(ActionKind::PlaceBuilding, static_cast<int>(A));

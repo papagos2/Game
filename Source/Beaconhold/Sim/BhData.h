@@ -116,10 +116,10 @@ struct GatherTuning
 };
 
 // Buildings the Lamplighter can place, in build-menu order.
-inline constexpr Archetype BuildMenu[] = {
+inline constexpr Archetype BuildableStructures[] = {
 	Archetype::Cottage, Archetype::Barracks, Archetype::Storehouse, Archetype::Watchtower,
 	Archetype::Forge,   Archetype::Sanctum,  Archetype::StagLodge,  Archetype::Beacon,
 };
-inline constexpr int BuildMenuCount = static_cast<int>(sizeof(BuildMenu) / sizeof(BuildMenu[0]));
+inline constexpr int BuildableStructureCount = static_cast<int>(sizeof(BuildableStructures) / sizeof(BuildableStructures[0]));
 
 } // namespace bh

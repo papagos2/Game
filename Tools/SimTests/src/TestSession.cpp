@@ -179,7 +179,7 @@ BH_TEST(Session_TouchFlow_SelectGatherBuild)
 	BH_EXPECT(!Hud.Actions.empty() && Hud.Actions[0].Id.Kind == ActionKind::BuildMenu);
 	S.ExecuteAction(ActionId(ActionKind::BuildMenu));
 	BuildHudModel(S, Hud);
-	BH_EXPECT(static_cast<int>(Hud.Actions.size()) == BuildMenuCount + 1);
+	BH_EXPECT(static_cast<int>(Hud.Actions.size()) == BuildableStructureCount + 1);
 	S.ExecuteAction(ActionId(ActionKind::PlaceBuilding, static_cast<int>(Archetype::Cottage)));
 	BH_EXPECT(S.GetControl().bPlacing);
 	BH_EXPECT(S.GetControl().PlaceState == PlaceResult::Ok);
