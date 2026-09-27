@@ -964,6 +964,8 @@ float UiTexMargin(UiTex T)
 	case UiTex::Vignette:
 	case UiTex::Gradient:
 		return 0.f;
+	case UiTex::Highlight:
+		return 0.35f;
 	case UiTex::BarBack:
 	case UiTex::BarFill:
 		return 0.45f;
@@ -1123,6 +1125,35 @@ void PaintUiTexture(UiTex T, int Size, ImageRGBA& Out)
 				P[1] = static_cast<uint8_t>(Ink.G * 255.f);
 				P[2] = static_cast<uint8_t>(Ink.B * 255.f);
 				P[3] = static_cast<uint8_t>(A * 0.8f * 255.f);
+			}
+		}
+		return;
+	}
+	case UiTex::Highlight:
+	{
+		// Rim only: a bright line with a soft glow inside, fully clear in the middle.
+		Out.Init(Size, Size);
+		const float Half = static_cast<float>(Size) * 0.5f - 0.5f;
+		const float Radius = 0.2f * static_cast<float>(Size);
+		for (int Y = 0; Y < Size; ++Y)
+		{
+			for (int X = 0; X < Size; ++X)
+			{
+				const float Px = static_cast<float>(X) + 0.5f - static_cast<float>(Size) * 0.5f;
+				const float Py = static_cast<float>(Y) + 0.5f - static_cast<float>(Size) * 0.5f;
+				const float D = UiRoundRectDist(Px, Py, Half, Radius);
+				if (D > 0.5f)
+				{
+					continue;
+				}
+				const float Line = Saturate(1.f - AbsF(D + 2.5f) / 2.f);
+				const float Glow = Saturate(1.f + D / (static_cast<float>(Size) * 0.12f)) * 0.55f;
+				const float A = MaxF(Line, Glow * Glow) * Saturate(0.5f - D);
+				uint8_t* P = &Out.Px[static_cast<size_t>((Y * Size + X) * 4)];
+				P[0] = 255;
+				P[1] = static_cast<uint8_t>(LerpF(200.f, 240.f, Line));
+				P[2] = static_cast<uint8_t>(LerpF(90.f, 160.f, Line));
+				P[3] = static_cast<uint8_t>(Saturate(A) * 255.f);
 			}
 		}
 		return;

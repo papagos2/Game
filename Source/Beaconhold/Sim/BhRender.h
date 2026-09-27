@@ -233,6 +233,7 @@ enum class UiTex : uint8_t
 	Circle,         // white disc (tinted)
 	Vignette,       // radial darkening for menus
 	Gradient,       // vertical fade (top transparent, bottom dark)
+	Highlight,      // glowing gold rim with a clear centre (tutorial highlight)
 	Count
 };
 constexpr int NumUiTex = static_cast<int>(UiTex::Count);
