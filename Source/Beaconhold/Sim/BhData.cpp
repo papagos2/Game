@@ -1,4 +1,4 @@
-// Beaconhold simulation core — static game data tables.
+// Beaconhold simulation core - static game data tables.
 #include "BhData.h"
 
 #include <array>

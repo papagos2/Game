@@ -1,4 +1,4 @@
-// Beaconhold — root of the UI: the input layer, the in-mission HUD and every menu and dialog
+// Beaconhold - root of the UI: the input layer, the in-mission HUD and every menu and dialog
 // (main menu, campaign, boons, settings, about, briefing, pause, results, confirmations).
 // Keyboard shortcuts for desktop are handled here too.
 #pragma once

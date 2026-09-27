@@ -1,4 +1,4 @@
-// Beaconhold — audio: a small software mixer streamed through one procedural sound wave.
+// Beaconhold - audio: a small software mixer streamed through one procedural sound wave.
 //
 // Every sound effect and both music loops are synthesized at startup (Sim/BhSynth) on a worker
 // thread, then mixed here. This keeps the game free of audio assets and gives full control over

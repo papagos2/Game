@@ -1,4 +1,4 @@
-// Beaconhold — in-mission HUD: resources, timer and wave warnings, notices, objectives, the
+// Beaconhold - in-mission HUD: resources, timer and wave warnings, notices, objectives, the
 // tutorial card, the minimap, the selection panel, the command card and the quick bar.
 // Built once; values update through attribute lambdas, and the few variable-size parts
 // (selection details, notices) are rebuilt only when their shape changes.

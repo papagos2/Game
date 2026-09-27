@@ -1,4 +1,4 @@
-// Beaconhold simulation core — per-tick behaviour: movement, combat, gathering, production.
+// Beaconhold simulation core - per-tick behaviour: movement, combat, gathering, production.
 #include "BhWorld.h"
 
 #include <algorithm>

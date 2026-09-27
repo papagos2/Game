@@ -1,4 +1,4 @@
-// Beaconhold simulation core — campaign progress and permanent Warden Boons.
+// Beaconhold simulation core - campaign progress and permanent Warden Boons.
 #pragma once
 
 #include "BhTypes.h"

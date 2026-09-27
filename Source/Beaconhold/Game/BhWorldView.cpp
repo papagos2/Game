@@ -1,4 +1,4 @@
-// Beaconhold — the visible world.
+// Beaconhold - the visible world.
 #include "Game/BhWorldView.h"
 
 #include "Game/BhAssets.h"

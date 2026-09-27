@@ -1,4 +1,4 @@
-// Beaconhold — world-space overlays.
+// Beaconhold - world-space overlays.
 #include "Game/BhHUD.h"
 
 #include "Game/BhCommon.h"

@@ -1,4 +1,4 @@
-// Beaconhold — helpers for runtime-created mesh components.
+// Beaconhold - helpers for runtime-created mesh components.
 #include "Game/BhComponents.h"
 
 #include "Components/StaticMeshComponent.h"

@@ -1,4 +1,4 @@
-// Beaconhold — game mode: no pawn (the camera belongs to the director), our controller and HUD.
+// Beaconhold - game mode: no pawn (the camera belongs to the director), our controller and HUD.
 #pragma once
 
 #include "CoreMinimal.h"

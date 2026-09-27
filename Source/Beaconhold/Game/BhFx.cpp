@@ -1,4 +1,4 @@
-// Beaconhold — code-driven effects.
+// Beaconhold - code-driven effects.
 #include "Game/BhFx.h"
 
 #include "Game/BhAssets.h"

@@ -1,4 +1,4 @@
-// Beaconhold simulation core — visual models built from primitive shapes, and the art palette.
+// Beaconhold simulation core - visual models built from primitive shapes, and the art palette.
 //
 // Every unit, building, tree and prop is described as a list of primitive parts (cube,
 // cylinder, sphere, cone) in the entity's local frame: X forward, Y right, Z up, units in

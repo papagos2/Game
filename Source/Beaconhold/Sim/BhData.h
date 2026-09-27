@@ -1,4 +1,4 @@
-// Beaconhold simulation core — static game data (stats, costs, tech tree).
+// Beaconhold simulation core - static game data (stats, costs, tech tree).
 #pragma once
 
 #include "BhTypes.h"

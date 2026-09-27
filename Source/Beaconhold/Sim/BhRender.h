@@ -1,4 +1,4 @@
-// Beaconhold simulation core — render preparation for the engine layer.
+// Beaconhold simulation core - render preparation for the engine layer.
 //
 // Everything the renderer needs that can be computed without the engine lives here, so it is
 // testable and the Unreal layer stays thin:
@@ -97,7 +97,7 @@ struct RenderMesh
 constexpr float UnrealUnitsPerTile = 100.f;
 
 // Appends a mesh as palette geometry (scaled to Unreal units). Lighting is baked as if the mesh
-// were rotated by BakeYaw degrees in the world — the yaw it is normally seen at.
+// were rotated by BakeYaw degrees in the world - the yaw it is normally seen at.
 void AppendRenderMesh(const MeshData& In, float BakeYaw, ColorPalette& Palette, RenderMesh& Out);
 
 // Soft shadow on the ground, in tiles. Directional shadows stretch away from the sun with Height.

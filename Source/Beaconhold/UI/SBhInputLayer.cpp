@@ -1,4 +1,4 @@
-// Beaconhold — full-screen input layer.
+// Beaconhold - full-screen input layer.
 #include "UI/SBhInputLayer.h"
 
 #include "Game/BhDirector.h"

@@ -1,4 +1,4 @@
-// Beaconhold simulation core — low-poly mesh generation.
+// Beaconhold simulation core - low-poly mesh generation.
 #include "BhMeshGen.h"
 
 #include "BhMath.h"

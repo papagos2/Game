@@ -1,4 +1,4 @@
-// Beaconhold simulation core — procedural painter (icons, decals, minimap).
+// Beaconhold simulation core - procedural painter (icons, decals, minimap).
 #include "BhPainter.h"
 
 #include "BhVisuals.h"

@@ -1,4 +1,4 @@
-// Beaconhold — shared helpers for the Unreal layer: logging and conversions between the
+// Beaconhold - shared helpers for the Unreal layer: logging and conversions between the
 // simulation core (tiles, sRGB colours, std::string) and Unreal types.
 #pragma once
 

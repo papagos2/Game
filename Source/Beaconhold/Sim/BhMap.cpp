@@ -1,4 +1,4 @@
-// Beaconhold simulation core — tile map.
+// Beaconhold simulation core - tile map.
 #include "BhMap.h"
 
 namespace bh

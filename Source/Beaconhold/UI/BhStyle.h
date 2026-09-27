@@ -1,4 +1,4 @@
-// Beaconhold — UI style: brushes made from the runtime-painted textures, button styles, fonts
+// Beaconhold - UI style: brushes made from the runtime-painted textures, button styles, fonts
 // and the colour set. Layout sizes are in Slate units on a 1080-high reference screen (the
 // engine's DPI curve scales them to the device).
 #pragma once

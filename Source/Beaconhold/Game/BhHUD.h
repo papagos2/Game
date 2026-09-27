@@ -1,4 +1,4 @@
-// Beaconhold — world-space overlays drawn on the canvas under the Slate UI: health and
+// Beaconhold - world-space overlays drawn on the canvas under the Slate UI: health and
 // construction bars, floating resource numbers, the tutorial pointer and the selection box.
 #pragma once
 

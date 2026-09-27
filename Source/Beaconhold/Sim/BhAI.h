@@ -1,4 +1,4 @@
-// Beaconhold simulation core — Gloam commander AI.
+// Beaconhold simulation core - Gloam commander AI.
 //
 // The Gloam do not gather: they earn "gloom" over time, train from their buildings, keep a
 // home guard, launch escalating attack waves (often at outlying Beacons) and strike back

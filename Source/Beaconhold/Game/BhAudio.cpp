@@ -1,4 +1,4 @@
-// Beaconhold — audio mixer and procedural sound wave.
+// Beaconhold - audio mixer and procedural sound wave.
 #include "Game/BhAudio.h"
 
 #include "Game/BhCommon.h"

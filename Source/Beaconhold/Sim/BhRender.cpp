@@ -1,4 +1,4 @@
-// Beaconhold simulation core — render preparation for the engine layer.
+// Beaconhold simulation core - render preparation for the engine layer.
 #include "BhRender.h"
 
 #include "BhData.h"

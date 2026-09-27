@@ -1,4 +1,4 @@
-// Beaconhold — project settings.
+// Beaconhold - project settings.
 #include "Game/BhSettings.h"
 
 UBhSettings::UBhSettings()

@@ -1,4 +1,4 @@
-// Beaconhold — the director: runs a simulation session and presents it (world view, effects,
+// Beaconhold - the director: runs a simulation session and presents it (world view, effects,
 // camera, audio, minimap, notices). One director lives in the map for the whole app session;
 // the menu backdrop and every mission are sessions it starts and ends.
 #pragma once

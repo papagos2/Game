@@ -1,4 +1,4 @@
-// Beaconhold — in-mission HUD.
+// Beaconhold - in-mission HUD.
 #include "UI/SBhGameHud.h"
 
 #include "Game/BhCommon.h"
@@ -375,7 +375,7 @@ TSharedRef<SWidget> SBhGameHud::MakeTopRight()
 			BhUi::TextButton(S, TAttribute<FText>::CreateLambda([this]()
 				{
 					const ABhDirector* D = Director();
-					return FText::FromString(D != nullptr && D->GetSpeed() > 1.5f ? TEXT("2×") : TEXT("1×"));
+					return FText::FromString(D != nullptr && D->GetSpeed() > 1.5f ? TEXT("2\u00D7") : TEXT("1\u00D7"));
 				}),
 				FOnClicked::CreateLambda([this]()
 				{
@@ -431,7 +431,7 @@ TSharedRef<SWidget> SBhGameHud::MakeTutorial()
 					.Text_Lambda([this]()
 					{
 						const bh::HudModel& H = Hud();
-						return FText::FromString(FString::Printf(TEXT("TUTORIAL  ·  STEP %d OF %d"), H.TutorialStep + 1, FMath::Max(1, H.TutorialSteps)));
+						return FText::FromString(FString::Printf(TEXT("TUTORIAL  \u00B7  STEP %d OF %d"), H.TutorialStep + 1, FMath::Max(1, H.TutorialSteps)));
 					})
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 6.f, 0.f, 0.f))

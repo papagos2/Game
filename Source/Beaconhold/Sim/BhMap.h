@@ -1,4 +1,4 @@
-// Beaconhold simulation core — tile map (terrain, trees, occupancy, beacon sites).
+// Beaconhold simulation core - tile map (terrain, trees, occupancy, beacon sites).
 #pragma once
 
 #include "BhMath.h"

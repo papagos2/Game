@@ -1,4 +1,4 @@
-// Beaconhold simulation core — touch/mouse gesture recognizer.
+// Beaconhold simulation core - touch/mouse gesture recognizer.
 //
 // Raw pointers go in (screen pixels), gestures come out:
 //   tap, double tap, pan (one finger), long-press then drag = selection box, pinch (two fingers).

@@ -1,4 +1,4 @@
-// Beaconhold — game instance.
+// Beaconhold - game instance.
 #include "Game/BhGameInstance.h"
 
 #include "Game/BhAssets.h"

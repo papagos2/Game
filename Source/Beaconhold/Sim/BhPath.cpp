@@ -1,4 +1,4 @@
-// Beaconhold simulation core — grid A* pathfinding.
+// Beaconhold simulation core - grid A* pathfinding.
 #include "BhPath.h"
 
 #include <algorithm>

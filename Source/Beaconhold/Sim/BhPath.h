@@ -1,4 +1,4 @@
-// Beaconhold simulation core — grid A* pathfinding with path smoothing.
+// Beaconhold simulation core - grid A* pathfinding with path smoothing.
 #pragma once
 
 #include "BhMap.h"

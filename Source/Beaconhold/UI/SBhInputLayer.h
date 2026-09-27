@@ -1,4 +1,4 @@
-// Beaconhold — full-screen input layer under the HUD. Touches and mouse presses that no HUD
+// Beaconhold - full-screen input layer under the HUD. Touches and mouse presses that no HUD
 // widget takes land here and are forwarded (in viewport pixels) to the simulation's gesture
 // recognizer: tap, double tap, pan, pinch, long-press box select; on desktop left-drag box
 // select, right-click command, right-drag pan and the wheel to zoom.

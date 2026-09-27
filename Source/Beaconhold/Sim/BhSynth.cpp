@@ -1,4 +1,4 @@
-// Beaconhold simulation core — procedural audio.
+// Beaconhold simulation core - procedural audio.
 #include "BhSynth.h"
 
 #include "BhData.h"

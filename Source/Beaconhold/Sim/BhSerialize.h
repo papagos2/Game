@@ -1,4 +1,4 @@
-// Beaconhold simulation core — save/restore a mission session (suspend & resume on mobile).
+// Beaconhold simulation core - save/restore a mission session (suspend & resume on mobile).
 #pragma once
 
 #include "BhSession.h"

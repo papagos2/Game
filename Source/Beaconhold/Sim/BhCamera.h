@@ -1,4 +1,4 @@
-// Beaconhold simulation core — RTS camera rig (focus point + zoom distance, inertia, bounds).
+// Beaconhold simulation core - RTS camera rig (focus point + zoom distance, inertia, bounds).
 // The presentation layer turns Focus/Distance/Pitch/Yaw into an actual camera transform.
 #pragma once
 

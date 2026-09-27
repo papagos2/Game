@@ -1,4 +1,4 @@
-// Beaconhold — primary game module.
+// Beaconhold - primary game module.
 #include "Modules/ModuleManager.h"
 
 #include "Game/BhCommon.h"

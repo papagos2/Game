@@ -1,4 +1,4 @@
-// Beaconhold simulation core — HUD view-model, notices and mission summary.
+// Beaconhold simulation core - HUD view-model, notices and mission summary.
 // Everything the UI shows is computed here so the presentation layer only draws it.
 #pragma once
 

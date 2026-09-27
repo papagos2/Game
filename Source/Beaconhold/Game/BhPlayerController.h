@@ -1,4 +1,4 @@
-// Beaconhold — player controller: owns the Slate UI and connects it to the director and the
+// Beaconhold - player controller: owns the Slate UI and connects it to the director and the
 // saved campaign. Input goes through the UI's full-screen input layer, not the engine's input
 // bindings, so touch and mouse share one gesture recognizer.
 #pragma once

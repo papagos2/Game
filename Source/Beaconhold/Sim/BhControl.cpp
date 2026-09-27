@@ -1,4 +1,4 @@
-// Beaconhold simulation core — player control.
+// Beaconhold simulation core - player control.
 #include "BhControl.h"
 
 #include <algorithm>

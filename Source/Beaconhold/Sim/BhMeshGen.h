@@ -1,4 +1,4 @@
-// Beaconhold simulation core — low-poly mesh generation.
+// Beaconhold simulation core - low-poly mesh generation.
 //
 // Builds the actual triangle meshes the game renders: flat-shaded primitives, whole models
 // merged into one mesh per archetype (sections grouped by colour), and chunked terrain, tree

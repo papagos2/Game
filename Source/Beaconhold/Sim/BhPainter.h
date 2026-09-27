@@ -1,4 +1,4 @@
-// Beaconhold simulation core — procedural 2D painter for icons and UI/decal textures.
+// Beaconhold simulation core - procedural 2D painter for icons and UI/decal textures.
 //
 // Icons are drawn from anti-aliased signed-distance shapes into RGBA8 images at runtime, so
 // the game needs no image assets. The same code produces preview PNGs in the test harness.

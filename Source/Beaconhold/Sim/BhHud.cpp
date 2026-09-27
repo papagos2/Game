@@ -1,4 +1,4 @@
-// Beaconhold simulation core — HUD view-model.
+// Beaconhold simulation core - HUD view-model.
 #include "BhHud.h"
 
 #include <cstdio>

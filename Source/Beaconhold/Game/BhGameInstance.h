@@ -1,4 +1,4 @@
-// Beaconhold — game instance: campaign progress, player settings, saving, app lifecycle, and
+// Beaconhold - game instance: campaign progress, player settings, saving, app lifecycle, and
 // the runtime content factory that lives for the whole app session.
 #pragma once
 

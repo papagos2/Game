@@ -1,4 +1,4 @@
-// Beaconhold simulation core — Gloam commander AI.
+// Beaconhold simulation core - Gloam commander AI.
 #include "BhAI.h"
 
 #include <algorithm>

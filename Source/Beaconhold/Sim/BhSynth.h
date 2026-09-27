@@ -1,4 +1,4 @@
-// Beaconhold simulation core — procedural sound effects and ambient music.
+// Beaconhold simulation core - procedural sound effects and ambient music.
 //
 // All audio is synthesized at startup (16-bit mono PCM), so the game ships without sound
 // assets. Real recordings can replace any cue later via the audio settings in the editor.

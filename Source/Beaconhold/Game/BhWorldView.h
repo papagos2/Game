@@ -1,4 +1,4 @@
-// Beaconhold — the visible world: terrain, forest, props, ruins, units and buildings (with
+// Beaconhold - the visible world: terrain, forest, props, ruins, units and buildings (with
 // procedural animation), selection rings, placement preview and markers. It mirrors the
 // simulation every frame and owns every world component it creates.
 #pragma once

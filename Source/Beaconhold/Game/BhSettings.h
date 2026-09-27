@@ -1,4 +1,4 @@
-// Beaconhold — project settings (Project Settings > Game > Beaconhold, stored in DefaultGame.ini).
+// Beaconhold - project settings (Project Settings > Game > Beaconhold, stored in DefaultGame.ini).
 #pragma once
 
 #include "CoreMinimal.h"

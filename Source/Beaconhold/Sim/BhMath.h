@@ -1,4 +1,4 @@
-// Beaconhold simulation core — pure C++17, no Unreal includes.
+// Beaconhold simulation core - pure C++17, no Unreal includes.
 // Basic 2D math used by the simulation. World units are tiles (1 tile = 1 m = 100 UE units).
 #pragma once
 

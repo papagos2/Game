@@ -1,4 +1,4 @@
-// Beaconhold — reusable Slate building blocks.
+// Beaconhold - reusable Slate building blocks.
 #include "UI/BhWidgets.h"
 
 #include "Widgets/Images/SImage.h"

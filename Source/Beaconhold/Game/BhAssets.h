@@ -1,4 +1,4 @@
-// Beaconhold — runtime content factory.
+// Beaconhold - runtime content factory.
 //
 // The game ships without art assets: every texture (icons, UI panels, decals, the colour
 // palette) is painted and every mesh is built at runtime from the simulation core's

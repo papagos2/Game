@@ -1,4 +1,4 @@
-// Beaconhold — small reusable Slate building blocks shared by the HUD and the menus.
+// Beaconhold - small reusable Slate building blocks shared by the HUD and the menus.
 #pragma once
 
 #include "CoreMinimal.h"

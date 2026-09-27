@@ -1,4 +1,4 @@
-// Beaconhold simulation core — session save/restore.
+// Beaconhold simulation core - session save/restore.
 //
 // One visitor (VisitEntity etc.) describes every field once and is used for both writing and
 // reading, so the two can never drift apart. All targets are little-endian.

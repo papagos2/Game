@@ -1,4 +1,4 @@
-// Beaconhold simulation core — mission session.
+// Beaconhold simulation core - mission session.
 #include "BhSession.h"
 
 namespace bh

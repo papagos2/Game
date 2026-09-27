@@ -1,4 +1,4 @@
-// Beaconhold — code-driven effects: pooled mesh particles, projectile visuals and fading ground
+// Beaconhold - code-driven effects: pooled mesh particles, projectile visuals and fading ground
 // markers. No particle assets are needed; every effect is a few small palette meshes animated
 // on the CPU (cheap enough for phones at the counts an RTS needs).
 #pragma once

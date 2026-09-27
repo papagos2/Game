@@ -1,4 +1,4 @@
-// Beaconhold simulation core — a playable mission session.
+// Beaconhold simulation core - a playable mission session.
 //
 // Owns the world, mission script, enemy AI, player control, camera and gesture recognizer.
 // The presentation layer feeds it frame time and raw pointer input, and renders its state.

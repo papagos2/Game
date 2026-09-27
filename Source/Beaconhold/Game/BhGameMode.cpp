@@ -1,4 +1,4 @@
-// Beaconhold — game mode.
+// Beaconhold - game mode.
 #include "Game/BhGameMode.h"
 
 #include "Game/BhDirector.h"

@@ -1,4 +1,4 @@
-// Beaconhold simulation core — player control: selection, smart commands, placement, actions.
+// Beaconhold simulation core - player control: selection, smart commands, placement, actions.
 #pragma once
 
 #include "BhCamera.h"

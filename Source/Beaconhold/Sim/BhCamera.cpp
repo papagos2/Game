@@ -1,4 +1,4 @@
-// Beaconhold simulation core — RTS camera rig.
+// Beaconhold simulation core - RTS camera rig.
 #include "BhCamera.h"
 
 namespace bh

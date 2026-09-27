@@ -1,4 +1,4 @@
-// Beaconhold simulation core — the world: entities, orders, economy, combat.
+// Beaconhold simulation core - the world: entities, orders, economy, combat.
 #pragma once
 
 #include "BhData.h"

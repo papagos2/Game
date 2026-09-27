@@ -1,4 +1,4 @@
-// Beaconhold — player controller.
+// Beaconhold - player controller.
 #include "Game/BhPlayerController.h"
 
 #include "Game/BhCommon.h"

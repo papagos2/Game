@@ -1,4 +1,4 @@
-// Beaconhold simulation core — campaign progress and boons.
+// Beaconhold simulation core - campaign progress and boons.
 #include "BhProgress.h"
 
 #include "BhData.h"

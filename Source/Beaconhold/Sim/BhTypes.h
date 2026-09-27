@@ -1,4 +1,4 @@
-// Beaconhold simulation core — shared enums and identifiers.
+// Beaconhold simulation core - shared enums and identifiers.
 #pragma once
 
 #include <cstdint>

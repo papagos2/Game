@@ -1,4 +1,4 @@
-// Beaconhold simulation core — gesture recognizer.
+// Beaconhold simulation core - gesture recognizer.
 #include "BhGestures.h"
 
 #include "BhMath.h"

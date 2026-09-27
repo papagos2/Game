@@ -1,4 +1,4 @@
-// Beaconhold simulation core — campaign missions, map loader and mission runtime.
+// Beaconhold simulation core - campaign missions, map loader and mission runtime.
 //
 // Map legend:
 //   .  grass        ,  meadow        :  dirt path     ;  sand        ~  water

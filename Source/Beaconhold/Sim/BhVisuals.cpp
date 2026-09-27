@@ -1,4 +1,4 @@
-// Beaconhold simulation core — primitive-based models.
+// Beaconhold simulation core - primitive-based models.
 #include "BhVisuals.h"
 
 #include "BhData.h"

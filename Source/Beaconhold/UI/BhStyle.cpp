@@ -1,4 +1,4 @@
-// Beaconhold — UI style.
+// Beaconhold - UI style.
 #include "UI/BhStyle.h"
 
 #include "Game/BhAssets.h"

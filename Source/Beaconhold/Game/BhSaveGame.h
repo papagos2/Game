@@ -1,4 +1,4 @@
-// Beaconhold — saved data: campaign progress and settings, and a suspended mission.
+// Beaconhold - saved data: campaign progress and settings, and a suspended mission.
 #pragma once
 
 #include "CoreMinimal.h"

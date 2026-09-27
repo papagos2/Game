@@ -1,4 +1,4 @@
-// Beaconhold — helpers for the runtime-created mesh components that draw the world.
+// Beaconhold - helpers for the runtime-created mesh components that draw the world.
 #pragma once
 
 #include "CoreMinimal.h"

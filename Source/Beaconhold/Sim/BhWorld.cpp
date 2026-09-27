@@ -1,4 +1,4 @@
-// Beaconhold simulation core — world setup, queries, rules and commands.
+// Beaconhold simulation core - world setup, queries, rules and commands.
 #include "BhWorld.h"
 
 #include <algorithm>

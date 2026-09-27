@@ -1,4 +1,4 @@
-// Beaconhold simulation core — mission definitions and mission runtime (objectives, waves, tutorial).
+// Beaconhold simulation core - mission definitions and mission runtime (objectives, waves, tutorial).
 #pragma once
 
 #include "BhWorld.h"

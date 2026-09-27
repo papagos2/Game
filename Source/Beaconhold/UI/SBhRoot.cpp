@@ -1,4 +1,4 @@
-// Beaconhold — root of the UI.
+// Beaconhold - root of the UI.
 #include "UI/SBhRoot.h"
 
 #include "Game/BhCommon.h"
@@ -360,7 +360,7 @@ TSharedRef<SWidget> SBhRoot::BuildMainMenu()
 					.ContentPadding(FMargin(12.f, 8.f))
 					.OnClicked(Click([this]() { SetScreen(EScreen::About); }))
 					[
-						BhUi::Label(RootText(TEXT("v0.1  ·  About")), 17.f, FSlateColor(BhColors::TextDim), false)
+						BhUi::Label(RootText(TEXT("v0.1  \u00B7  About")), 17.f, FSlateColor(BhColors::TextDim), false)
 					]
 				]
 			]
@@ -801,14 +801,14 @@ TSharedRef<SWidget> SBhRoot::BuildBriefing()
 			.AutoHeight()
 			.Padding(FMargin(0.f, 3.f))
 			[
-				BhUi::Label(FText::FromString(FString::Printf(TEXT("•  %s%s"), O.bOptional ? TEXT("(Optional) ") : TEXT(""), *BhUE::ToFString(O.Text))), 20.f,
+				BhUi::Label(FText::FromString(FString::Printf(TEXT("\u2022  %s%s"), O.bOptional ? TEXT("(Optional) ") : TEXT(""), *BhUE::ToFString(O.Text))), 20.f,
 					FSlateColor(O.bOptional ? BhColors::TextDim : BhColors::Text), false, ETextJustify::Left, 900.f)
 			];
 	}
 	TSharedRef<SWidget> Content = SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight()
 		[
-			BhUi::Label(FText::FromString(FString::Printf(TEXT("MISSION %s  ·  %s"), RootRoman(S->GetConfig().MissionIndex), *BhUE::ToFString(bh::DifficultyName(S->GetConfig().Diff)))),
+			BhUi::Label(FText::FromString(FString::Printf(TEXT("MISSION %s  \u00B7  %s"), RootRoman(S->GetConfig().MissionIndex), *BhUE::ToFString(bh::DifficultyName(S->GetConfig().Diff)))),
 				18.f, FSlateColor(BhColors::Gold))
 		]
 		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 6.f, 0.f, 0.f))
@@ -977,7 +977,7 @@ TSharedRef<SWidget> SBhRoot::BuildResults()
 				]
 			];
 	}
-	const FString Stats = FString::Printf(TEXT("Time %s    ·    Trained %d    ·    Lost %d    ·    Gloam defeated %d    ·    Gathered %d"),
+	const FString Stats = FString::Printf(TEXT("Time %s    \u00B7    Trained %d    \u00B7    Lost %d    \u00B7    Gloam defeated %d    \u00B7    Gathered %d"),
 		*BhUE::TimeText(Summary.Time).ToString(), Summary.UnitsTrained, Summary.UnitsLost, Summary.Kills, Summary.Gathered);
 
 	TSharedRef<SHorizontalBox> Buttons = SNew(SHorizontalBox);

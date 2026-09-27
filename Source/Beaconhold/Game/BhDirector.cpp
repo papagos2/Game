@@ -1,4 +1,4 @@
-// Beaconhold — the director.
+// Beaconhold - the director.
 #include "Game/BhDirector.h"
 
 #include "Game/BhAssets.h"

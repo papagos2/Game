@@ -1,4 +1,4 @@
-// Beaconhold — runtime content factory.
+// Beaconhold - runtime content factory.
 #include "Game/BhAssets.h"
 
 #include "Game/BhCommon.h"
