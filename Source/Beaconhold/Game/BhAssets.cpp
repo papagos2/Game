@@ -6,6 +6,7 @@
 
 #include "Engine/StaticMesh.h"
 #include "Engine/Texture2D.h"
+#include "HAL/PlatformTime.h"
 #include "MaterialDomain.h"
 #include "Materials/Material.h"
 #include "Materials/MaterialInstanceDynamic.h"

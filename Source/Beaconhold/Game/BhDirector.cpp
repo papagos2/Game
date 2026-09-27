@@ -16,6 +16,7 @@
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
+#include "HAL/PlatformTime.h"
 
 #include <algorithm>
 

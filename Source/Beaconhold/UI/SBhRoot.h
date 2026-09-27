@@ -22,7 +22,7 @@ class UBhGameInstance;
 class SBhRoot : public SCompoundWidget
 {
 public:
-	SLATE_BEGIN_ARGS(SBhRoot) {}
+	SLATE_BEGIN_ARGS(SBhRoot) : _Owner(nullptr) {}
 		SLATE_ARGUMENT(ABhPlayerController*, Owner)
 	SLATE_END_ARGS()
 

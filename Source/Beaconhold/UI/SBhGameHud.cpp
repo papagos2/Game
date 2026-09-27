@@ -67,7 +67,7 @@ float HudPulse(double Speed)
 class SBhMinimapView : public SCompoundWidget
 {
 public:
-	SLATE_BEGIN_ARGS(SBhMinimapView) {}
+	SLATE_BEGIN_ARGS(SBhMinimapView) : _Brush(nullptr) {}
 		SLATE_ARGUMENT(TWeakObjectPtr<ABhPlayerController>, Owner)
 		SLATE_ARGUMENT(const FSlateBrush*, Brush)
 	SLATE_END_ARGS()
@@ -152,6 +152,7 @@ void SBhGameHud::Construct(const FArguments& InArgs)
 {
 	Owner = InArgs._Owner;
 	Style = InArgs._Style;
+	check(Style != nullptr);
 	OnPause = InArgs._OnPause;
 	MinimapBrush.DrawAs = ESlateBrushDrawType::Image;
 	MinimapBrush.ImageSize = FVector2D(128.f, 128.f);

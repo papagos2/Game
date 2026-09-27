@@ -19,7 +19,7 @@ class SVerticalBox;
 class SBhGameHud : public SCompoundWidget
 {
 public:
-	SLATE_BEGIN_ARGS(SBhGameHud) {}
+	SLATE_BEGIN_ARGS(SBhGameHud) : _Style(nullptr) {}
 		SLATE_ARGUMENT(TWeakObjectPtr<ABhPlayerController>, Owner)
 		SLATE_ARGUMENT(const FBhStyle*, Style)
 		SLATE_EVENT(FSimpleDelegate, OnPause)
