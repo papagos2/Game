@@ -70,7 +70,9 @@ interface HumanoidOpts {
 function humanoid(o: HumanoidOpts): Rig {
   const s = o.scale ?? 1;
   const bulk = o.bulk ?? 1;
-  const rig = makeRig('humanoid', 2.1 * s, 0.6 * s * bulk);
+  // Height is in model-local units; callers multiply it by root.scale for
+  // picking, projectiles and combat text. Radius is already a world value.
+  const rig = makeRig('humanoid', 2.1, 0.6 * s * bulk);
   const bm = mat(o.body);
   const tm = mat(o.trim);
   const sm = mat(o.skin);
@@ -184,7 +186,7 @@ function weapon(kind: NonNullable<HumanoidOpts['weapon']>, glow: string): THREE.
 }
 
 function quadruped(color: string, accent: string, scale: number, glowEyes?: string): Rig {
-  const rig = makeRig('quadruped', 1.2 * scale, 0.8 * scale);
+  const rig = makeRig('quadruped', 1.2, 0.8 * scale);
   const m = mat(color);
   const am = mat(accent);
   const b = rig.body;
@@ -260,6 +262,85 @@ function spider(color: string, accent: string): Rig {
   return rig;
 }
 
+function cindermaw(): Rig {
+  const rig = makeRig('quadruped', 2.8, 2.2);
+  const b = rig.body;
+  const hide = mat('#352522');
+  const plate = mat('#4c3934');
+  const horn = mat('#ab9380');
+  const ember = mat('#ff682f', '#9a260a');
+  const body = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 1), hide);
+  body.scale.set(1.05, 0.9, 1.65);
+  body.position.y = 1.7;
+  body.castShadow = true;
+  b.add(body);
+  for (const side of [-1, 1]) {
+    const shoulder = new THREE.Mesh(new THREE.IcosahedronGeometry(0.62, 0), plate);
+    shoulder.position.set(side * 0.83, 1.95, 0.8);
+    shoulder.castShadow = true;
+    b.add(shoulder);
+    for (const z of [-1.05, 1.05]) {
+      const leg = new THREE.Group();
+      const upper = box(0.48, 1.05, 0.54, hide);
+      upper.position.y = -0.48;
+      const claw = new THREE.Mesh(new THREE.ConeGeometry(0.19, 0.5, 5), horn);
+      claw.rotation.x = Math.PI / 2;
+      claw.position.set(0, -1.02, 0.32);
+      claw.castShadow = true;
+      leg.add(upper, claw);
+      const joint = pivot(side * 0.82, 1.35, z, leg);
+      b.add(joint);
+      rig.legs.push(joint);
+    }
+    const wing = new THREE.BufferGeometry();
+    wing.setAttribute('position', new THREE.Float32BufferAttribute([
+      0, 2.35, -0.55,
+      side * 2.3, 2.9, -1.15,
+      side * 1.75, 1.75, -2.05,
+      0, 2.35, -0.55,
+      side * 1.75, 1.75, -2.05,
+      side * 0.3, 1.5, -1.35,
+    ], 3));
+    wing.computeVertexNormals();
+    const membrane = new THREE.Mesh(wing, new THREE.MeshLambertMaterial({ color: '#5b302a', side: THREE.DoubleSide, flatShading: true }));
+    membrane.castShadow = true;
+    b.add(membrane);
+  }
+  const skull = new THREE.Mesh(new THREE.IcosahedronGeometry(0.62, 1), plate);
+  skull.scale.set(0.95, 0.78, 1.2);
+  const jaw = box(0.72, 0.23, 0.92, hide);
+  jaw.position.set(0, -0.35, 0.62);
+  const muzzle = new THREE.Mesh(new THREE.ConeGeometry(0.37, 0.95, 5), plate);
+  muzzle.rotation.x = Math.PI / 2;
+  muzzle.position.set(0, -0.1, 0.75);
+  const head = pivot(0, 2.05, 0.95, skull, jaw, muzzle);
+  for (const side of [-1, 1]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.11, 6, 4), ember);
+    eye.position.set(side * 0.4, 0.12, 0.49);
+    const crown = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.75, 5), horn);
+    crown.position.set(side * 0.4, 0.55, -0.3);
+    crown.rotation.z = side * 0.38;
+    head.add(eye, crown);
+  }
+  head.traverse((o) => { o.castShadow = true; });
+  b.add(head);
+  rig.head = head;
+  for (let i = 0; i < 5; i++) {
+    const spine = new THREE.Mesh(new THREE.ConeGeometry(0.22 - i * 0.02, 0.7 - i * 0.06, 5), horn);
+    spine.position.set(0, 2.55, 0.65 - i * 0.48);
+    spine.rotation.x = -0.25;
+    spine.castShadow = true;
+    b.add(spine);
+  }
+  const tail = new THREE.Mesh(new THREE.ConeGeometry(0.42, 2.8, 6), hide);
+  tail.rotation.x = -Math.PI / 2;
+  tail.position.set(0, 1.25, -2.4);
+  tail.castShadow = true;
+  b.add(tail);
+  rig.root.scale.setScalar(2.1);
+  return rig;
+}
+
 function collectMaterials(rig: Rig) {
   const set = new Set<THREE.MeshLambertMaterial>();
   rig.root.traverse((o) => {
@@ -312,7 +393,7 @@ export function buildMobModel(def: MobDef): Rig {
       break;
     case 'boss':
     default:
-      rig = humanoid({ body: def.color, trim: '#1a1210', skin: '#3a2a26', weapon: 'club', glow: def.accent, scale: 2.8, bulk: 1.4, horns: true });
+      rig = cindermaw();
       break;
   }
   collectMaterials(rig);

@@ -15,7 +15,8 @@ const seed = Number(process.argv[3] ?? 12345);
 let failed = false;
 
 for (const cls of classes) {
-  const page = await (await browser.newContext({ viewport: { width: 844, height: 390 } })).newPage();
+  const context = await browser.newContext({ viewport: { width: 844, height: 390 } });
+  const page = await context.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto(`http://127.0.0.1:5179/?seed=${seed}`);
@@ -168,6 +169,7 @@ for (const cls of classes) {
   console.log(`gear: ${result.gear.join(' | ')}`);
   if (errors.length) console.log('errors:', errors.slice(0, 5));
   if (!result.done || errors.length) failed = true;
+  await context.close();
 }
 await browser.close();
 await server.close();
