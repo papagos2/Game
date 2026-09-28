@@ -7,7 +7,8 @@ import { MAPS, type WorldId } from './data/world';
 import { worldDef } from './data/dungeons';
 import { Hud } from './ui/hud';
 import { Input } from './ui/input';
-import { Panels, classSelect, closeScreens, loadSetting, titleScreen } from './ui/screens';
+import { Panels, classSelect, closeScreens, loadSetting, saveSetting, titleScreen } from './ui/screens';
+import { Online, serverUrl } from './net/online';
 
 const canvas = document.getElementById('view') as HTMLCanvasElement;
 const hudEl = document.getElementById('hud')!;
@@ -37,6 +38,26 @@ function pause() {
 
 function resume() {
   if (game && !game.player.dead) game.paused = false;
+}
+
+let online: Online | null = null;
+
+/** Turns the online layer on or off (the address is remembered). */
+function setOnline(on: boolean, url: string) {
+  saveSetting('server', url);
+  saveSetting('online', on ? '1' : '0');
+  online?.disconnect();
+  online = null;
+  if (on && url) {
+    online = new Online(url, () => {
+      const p = game?.progress;
+      if (!p) return { name: 'Wanderer', cls: 'stormblade', spec: null, level: 1, title: null, world: null };
+      return { name: p.name, cls: p.cls, spec: p.spec, level: p.level, title: p.title, world: game?.map.dungeon ? null : game?.map.id ?? null };
+    });
+    online.onChat = (l) => hud?.chatLine(l.name, l.text, !!l.system);
+    online.connect();
+  }
+  if (game) game.online = online;
 }
 
 function startGame(progress: Progress, world?: WorldId) {
@@ -73,11 +94,17 @@ function startGame(progress: Progress, world?: WorldId) {
       panels?.dungeonComplete(map, first);
     },
   }, progress, input, defaultQuality(), world);
-  panels = new Panels(game, resume, quitToTitle, travel);
+  panels = new Panels(game, resume, quitToTitle, travel, { serverUrl, setOnline });
+  game.online = online;
+  if (online) {
+    online.onChat = (l) => hud?.chatLine(l.name, l.text, !!l.system);
+  }
+  if (!online && loadSetting('online') === '1' && serverUrl()) setOnline(true, serverUrl());
   hud = new Hud(game, {
     bag: () => { pause(); panels!.bag(); },
     quests: () => { pause(); panels!.questLog(); },
     menu: () => { pause(); panels!.menu(); },
+    chat: () => { pause(); panels!.chat(); },
     skills: () => { pause(); panels!.skills(); },
     talk: () => game?.tryInteract(),
   });
@@ -106,6 +133,9 @@ function teardown() {
 }
 
 function quitToTitle() {
+  // Leave the online world with the hero; it reconnects on the next start if enabled.
+  online?.disconnect();
+  online = null;
   teardown();
   showTitle();
 }

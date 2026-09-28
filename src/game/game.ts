@@ -19,6 +19,7 @@ import {
 import { ColliderGrid, buildWorld, type WorldScene } from './scene';
 import { Terrain, smoothstep } from './terrain';
 import { Unit } from './units';
+import type { Online } from '../net/online';
 import type { Input } from '../ui/input';
 
 export interface GameUI {
@@ -89,6 +90,9 @@ export class Game {
   private disposed = false;
   private playerSpec: SpecId | null;
   nodes: { mat: MaterialId; x: number; z: number; mesh: THREE.Object3D; readyAt: number }[] = [];
+  /** Optional online session (set by main). Other heroes are drawn but never fought. */
+  online: Online | null = null;
+  others = new Map<number, { unit: Unit; tx: number; tz: number; tf: number; mount: Rig | null; m: number }>();
   private buffCount = 0;
 
   constructor(
@@ -338,6 +342,7 @@ export class Game {
     this.updateEffects();
     this.updateEnvironment();
     if (activeBuffs(this.progress).length !== this.buffCount) this.recomputeStats();
+    this.updateOthers(dt);
     for (const n of this.nodes) n.mesh.visible = this.now >= n.readyAt;
     if (this.now - this.lastSave > 15) this.save();
   }
@@ -1210,6 +1215,68 @@ export class Game {
       this.ui.toast(`<span style="color:#ffd84a">Achievement: ${a.name}</span>${a.title ? ` - new title "${a.title}"` : ''}`);
       play('levelup');
     }
+  }
+
+  // ---------- Other players (online) ----------
+
+  private updateOthers(dt: number) {
+    const on = this.online;
+    const pl = this.player;
+    if (!on || on.status !== 'online') {
+      for (const id of [...this.others.keys()]) this.removeOther(id);
+      return;
+    }
+    on.world = this.map.dungeon ? null : this.map.id;
+    on.sendPos(this.now, pl.pos.x, pl.pos.z, pl.facing, pl.moving > 0.05, this.mounted, this.progress.level);
+    for (const [id, p] of on.players) {
+      let o = this.others.get(id);
+      if (!o) {
+        const u = new Unit(p.name, 'npc', p.level, 'npc', buildPlayerModel(p.cls, p.spec ? SPECS[p.spec]?.color : undefined));
+        this.placeUnit(u, p.x, p.z);
+        this.scene.add(u.rig.root);
+        o = { unit: u, tx: p.x, tz: p.z, tf: p.f, mount: null, m: 0 };
+        this.others.set(id, o);
+      }
+      o.unit.level = p.level;
+      o.unit.name = p.title ? `${p.name} ${p.title}` : p.name;
+      o.tx = p.x;
+      o.tz = p.z;
+      o.tf = p.f;
+      o.m = p.m;
+      if (p.mt && !o.mount) {
+        o.mount = buildMount(p.cls);
+        this.scene.add(o.mount.root);
+      } else if (!p.mt && o.mount) {
+        this.scene.remove(o.mount.root);
+        o.mount = null;
+      }
+    }
+    for (const id of [...this.others.keys()]) if (!on.players.has(id)) this.removeOther(id);
+    for (const o of this.others.values()) {
+      const u = o.unit;
+      const k = Math.min(1, dt * 8);
+      const x = u.pos.x + (o.tx - u.pos.x) * k;
+      const z = u.pos.z + (o.tz - u.pos.z) * k;
+      u.pos.set(x, this.heightAt(x, z), z);
+      u.facing = lerpAngle(u.facing, o.tf, k);
+      u.rig.root.position.copy(u.pos);
+      u.rig.root.rotation.y = u.facing;
+      if (o.mount) {
+        o.mount.root.position.copy(u.pos);
+        o.mount.root.rotation.y = u.facing;
+        animateRig(o.mount, dt, o.m, -1, false);
+        u.rig.root.position.y += 1.25;
+        animateRig(u.rig, dt, 0, -1, false);
+      } else animateRig(u.rig, dt, o.m, -1, false);
+    }
+  }
+
+  private removeOther(id: number) {
+    const o = this.others.get(id);
+    if (!o) return;
+    this.scene.remove(o.unit.rig.root);
+    if (o.mount) this.scene.remove(o.mount.root);
+    this.others.delete(id);
   }
 
   // ---------- Dungeon party ----------

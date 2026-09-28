@@ -133,7 +133,13 @@ function abilityText(g: Game, ab: AbilityDef) {
 export class Panels {
   private tab: 'core' | 'spec' = 'core';
 
-  constructor(private game: Game, private onClose: () => void, private onQuit: () => void, private onTravel: (map: WorldId) => void) {}
+  constructor(
+    private game: Game,
+    private onClose: () => void,
+    private onQuit: () => void,
+    private onTravel: (map: WorldId) => void,
+    private hooks: { serverUrl: () => string; setOnline: (on: boolean, url: string) => void } = { serverUrl: () => '', setOnline: () => undefined },
+  ) {}
 
   private close = () => {
     closeScreens();
@@ -603,6 +609,10 @@ export class Panels {
         <p class="sub">Played for ${mins} minute${mins === 1 ? '' : 's'}. Progress is saved automatically.</p>
         <div class="toggle"><span>Sound</span><button class="btn secondary" id="snd">${isSoundEnabled() ? 'On' : 'Off'}</button></div>
         <div class="toggle"><span>Graphics</span><button class="btn secondary" id="gfx">${g.quality === 'high' ? 'High' : 'Battery saver'}</button></div>
+        <h3>Online</h3>
+        <p class="sub">See other heroes on your map and chat with them. Everything else stays on your device. Status: <b>${g.online ? g.online.status : 'off'}</b></p>
+        <div class="row"><input class="name srv" id="srv" placeholder="Server address, e.g. wss://play.example.com" value="${escapeHtml(this.hooks.serverUrl())}" aria-label="Server address" /></div>
+        <div class="row" style="margin-top:8px"><button class="btn secondary" id="onl">${g.online && g.online.status !== 'off' ? 'Go offline' : 'Go online'}</button></div>
         <h3>How to play</h3>
         <p style="font-size:13px">Move with your left thumb and drag with your right to look around. Tap an enemy to target it and press <b>Attack</b>. Your abilities are around the Attack button. Spend talent points in <b>Skills</b>. Step out of coloured circles on the ground. When hurt, drink a healing draught (the red button).</p>
         <div class="row end"><button class="btn secondary" id="quit">Save and quit</button><button class="btn" id="resume">Resume</button></div>
@@ -623,6 +633,49 @@ export class Panels {
     on(el, '#quit', () => {
       g.save();
       this.onQuit();
+    });
+    on(el, '#onl', () => {
+      const url = (el.querySelector<HTMLInputElement>('#srv')!.value || '').trim();
+      this.hooks.setOnline(!(g.online && g.online.status !== 'off'), url);
+      setTimeout(() => this.menu(), 300);
+    });
+  }
+
+  chat() {
+    const g = this.game;
+    const sess = g.online;
+    if (!sess) return;
+    const lines = sess.chat.map((l) => l.system
+      ? `<div class="chatLine"><span class="gold">${escapeHtml(l.text)}</span></div>`
+      : `<div class="chatLine"><b>${escapeHtml(l.name)}:</b><span>${escapeHtml(l.text)}</span>${l.from !== sess.myId ? `<span class="acts"><button data-mute="${escapeHtml(l.name)}">Mute</button><button data-report="${l.from}">Report</button></span>` : ''}</div>`).join('');
+    const el = show(
+      `<div class="panel dialog wide">
+        <button class="close" id="x" aria-label="Close">&times;</button>
+        <h2>Chat</h2>
+        <p class="sub">Heroes on ${escapeHtml(g.map.name)}. Be kind: offensive words are filtered, and you can mute or report anyone.</p>
+        <div class="chatLog" id="log">${lines || '<p class="sub">No messages yet.</p>'}</div>
+        <div class="row"><input class="name chatIn" id="msg" maxlength="140" placeholder="Say something" aria-label="Message" /><button class="btn" id="send">Send</button></div>
+      </div>`,
+    );
+    const log = el.querySelector('#log')!;
+    log.scrollTop = log.scrollHeight;
+    const input = el.querySelector<HTMLInputElement>('#msg')!;
+    const send = () => {
+      if (sess.say(input.value)) input.value = '';
+      setTimeout(() => this.chat(), 250);
+    };
+    on(el, '#x', this.close);
+    on(el, '#send', send);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') send();
+    });
+    on(el, '[data-mute]', (_e, b) => {
+      sess.mute(b.dataset.mute!);
+      this.chat();
+    });
+    on(el, '[data-report]', (_e, b) => {
+      sess.report(Number(b.dataset.report), 'chat');
+      g.ui.message('Report sent');
     });
   }
 

@@ -29,12 +29,13 @@ export class Hud {
   private last: Record<string, string | number> = {};
   private barKey = '';
 
-  constructor(private game: Game, handlers: { bag: () => void; quests: () => void; menu: () => void; talk: () => void; skills: () => void }) {
+  constructor(private game: Game, handlers: { bag: () => void; quests: () => void; menu: () => void; talk: () => void; skills: () => void; chat: () => void }) {
     const cls = CLASSES[game.progress.cls];
     $('pRes').className = `fill ${cls.resource}`;
     this.mini = ($('minimap') as HTMLCanvasElement).getContext('2d')!;
     this.buildActionBar();
     $('btnSkills').onclick = handlers.skills;
+    $('btnChat').onclick = handlers.chat;
     $('btnBag').onclick = handlers.bag;
     $('btnQuests').onclick = handlers.quests;
     $('btnMenu').onclick = handlers.menu;
@@ -151,6 +152,15 @@ export class Hud {
     if (this.floaters.length > 40) this.floaters.shift()!.el.remove();
   }
 
+  chatLine(name: string, text: string, system: boolean) {
+    const box = $('chatFeed');
+    const el = document.createElement('div');
+    el.innerHTML = system ? `<span class="sys">${escapeHtml(text)}</span>` : `<b>${escapeHtml(name)}:</b> ${escapeHtml(text)}`;
+    box.appendChild(el);
+    while (box.children.length > 5) box.firstElementChild!.remove();
+    setTimeout(() => el.remove(), 12500);
+  }
+
   refreshTracker() {
     const g = this.game;
     const list = g.questCounts();
@@ -265,6 +275,13 @@ export class Hud {
     this.set('xpText', 'text', need ? `Level ${p.level}  -  ${Math.floor(p.xp)} / ${need} XP` : `Level ${p.level} (max)`);
     this.set('zoneName', 'text', g.zoneName);
 
+    // Online status.
+    const on = g.online;
+    const live = !!on && on.status !== 'off';
+    $('btnChat').hidden = !live;
+    $('onlineDot').hidden = !live;
+    if (on && live) this.set('onlineDot', 'text', on.status === 'online' ? `Online - ${on.population} heroes` : on.status === 'connecting' ? 'Connecting...' : 'Reconnecting...');
+
     // Timers.
     if (this.msgTimer > 0 && (this.msgTimer -= dt) <= 0) $('message').classList.remove('show');
     if (this.bannerTimer > 0 && (this.bannerTimer -= dt) <= 0) $('banner').classList.remove('show');
@@ -287,6 +304,7 @@ export class Hud {
     const candidates: Unit[] = [...g.npcs];
     for (const u of g.units) if (!u.dead && u.distTo(pl) < 38) candidates.push(u);
     candidates.push(...g.pets);
+    for (const o of g.others.values()) candidates.push(o.unit);
     for (const u of candidates) {
       const d = u.distTo(pl);
       if (d > 45) continue;
@@ -296,10 +314,11 @@ export class Hud {
       seen.add(u);
       let plate = this.plates.get(u);
       if (!plate) plate = this.makePlate(u);
-      const key = u.team === 'npc' ? npcMarker(g.progress, u.npc!.id) : `${u.level}|${u.name}|${levelColor(u.level, g.progress.level)}`;
+      const key = u.npc ? npcMarker(g.progress, u.npc.id) : `${u.level}|${u.name}|${levelColor(u.level, g.progress.level)}`;
       if (plate.key !== key) {
         plate.key = key;
-        if (u.team === 'npc') {
+        if (!u.npc && u.team === 'npc') plate.name.textContent = `${u.name} (${u.level})`;
+        else if (u.npc) {
           plate.mk!.textContent = key;
           plate.mk!.style.display = key ? '' : 'none';
         } else if (u.team === 'enemy') {
@@ -316,7 +335,7 @@ export class Hud {
     }
     for (const [u, plate] of this.plates) {
       if (!seen.has(u)) {
-        if (!g.units.includes(u) && !g.npcs.includes(u) && !g.pets.includes(u)) {
+        if (!g.units.includes(u) && !g.npcs.includes(u) && !g.pets.includes(u) && ![...g.others.values()].some((o) => o.unit === u)) {
           plate.el.remove();
           this.plates.delete(u);
         } else plate.el.style.display = 'none';
@@ -328,7 +347,7 @@ export class Hud {
     const el = document.createElement('div');
     el.className = 'plate';
     let mk: HTMLDivElement | null = null;
-    if (u.team === 'npc') {
+    if (u.npc) {
       mk = document.createElement('div');
       mk.className = 'mk';
       el.appendChild(mk);
@@ -336,7 +355,8 @@ export class Hud {
     const name = document.createElement('div');
     name.className = 'pn';
     name.textContent = u.name;
-    name.style.color = u.team === 'npc' ? '#8fe08a' : u.team === 'player' ? '#9fe8ff' : '#ff9b8a';
+    const other = !u.npc && u.team === 'npc';
+    name.style.color = other ? '#7fb6ff' : u.team === 'npc' ? '#8fe08a' : u.team === 'player' ? '#9fe8ff' : '#ff9b8a';
     el.appendChild(name);
     if (u.npc) {
       const title = document.createElement('div');

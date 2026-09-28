@@ -488,3 +488,24 @@ input.name {
   #tracker { display: none; }
   #targetFrame { top: calc(74px + var(--safe-t)); left: calc(10px + var(--safe-l)); }
 }
+
+/* ---------- Online ---------- */
+#chatFeed {
+  position: absolute; left: calc(12px + var(--safe-l)); bottom: calc(22px + var(--safe-b)); width: min(36vw, 340px);
+  display: flex; flex-direction: column; gap: 2px; font-size: 12px; pointer-events: none;
+  text-shadow: 0 1px 2px #000, 0 0 5px rgba(0,0,0,0.8);
+}
+#chatFeed div { animation: chatfade 12s forwards; }
+#chatFeed b { color: #7fb6ff; }
+#chatFeed .sys { color: var(--gold); }
+@keyframes chatfade { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }
+#onlineDot {
+  position: absolute; right: calc(10px + var(--safe-r)); top: calc(4px + var(--safe-t));
+  font-size: 10px; font-weight: 800; color: #6ee07a; text-shadow: 0 1px 2px #000;
+}
+.chatLog { max-height: 45vh; overflow: auto; display: flex; flex-direction: column; gap: 4px; margin: 8px 0; font-size: 13px; }
+.chatLine { display: flex; gap: 6px; align-items: baseline; }
+.chatLine b { color: #7fb6ff; }
+.chatLine .acts { margin-left: auto; display: flex; gap: 4px; }
+.chatLine .acts button { font-size: 11px; color: var(--ink-dim); padding: 4px 6px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.12); min-height: 30px; }
+input.chatIn, input.srv { flex: 1; width: auto; min-width: 0; }

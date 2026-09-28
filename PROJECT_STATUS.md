@@ -2,6 +2,20 @@
 
 Updated 2026-09-28 (expansion merged). Active branch: `claude/zealous-cori-dkwd60` in `papagos2/Game`.
 
+## MMO systems round (verified in the cloud session)
+
+- Added: auto-travel to quest objectives with mounts (level 5), gathering and crafting (draughts, elixirs,
+  reforging), faction reputation with discounts and a Revered epic, daily bounties, 19 achievements with
+  titles, three instanced dungeons with AI companions filling tank/healer/damage roles, and an optional
+  online layer (`server/`: presence per map and chat with filter, rate limits, mute and report).
+- `npm test`: 34 tests (including 5 server tests over real WebSockets). `npm run smoke`: passes, now also
+  covering auto-travel on a mount, gathering, crafting, the Journal tabs and a dungeon with its party.
+  `npm run online-e2e`: two browsers see each other and chat. `npm run playthrough all 12345`: all 9 paths
+  finish all three acts and all three dungeons (0-3 deaths).
+- Honest limits: combat is not shared between real players yet; no accounts, moderation process or
+  server hosting exist; companions and dungeons are balanced by bot, not by humans. See `docs/RESEARCH.md`
+  and `server/README.md`.
+
 ## Expansion: specializations, talents, three acts (verified in the cloud session)
 
 - **Content now in code:** 3 classes x 3 specializations (chosen at level 10, two extra abilities each at
