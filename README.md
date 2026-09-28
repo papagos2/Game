@@ -122,6 +122,9 @@ All optional; none is needed to build or play the game.
   cmake --build Tools/SimTests/build
   Tools/SimTests/build/bhtests
   ```
+- **Playtest matrix**: `Tools/SimTests/build/bhplaytest --brief --seeds 5` has scripted players
+  play every mission and difficulty with several army strategies and prints win rates, times,
+  losses, lulls, stuck units and invariant violations (drop `--brief` for full telemetry).
 - **Unreal layer compile check** without the engine (Python 3 and clang, or `CXX=g++`):
   `python3 Tools/UEStubs/check.py`. It catches type errors, missing includes, file name clashes
   and wrong format strings; it cannot prove the Unreal API matches, only a real build can.
