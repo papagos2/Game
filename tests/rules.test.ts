@@ -5,8 +5,9 @@ import { QUESTS, QUEST_BY_ID, QUEST_ITEMS } from '../src/data/quests';
 import { TREES, NODE_BY_ID } from '../src/data/talents';
 import { ALL_NPCS, MAPS, MAP_ORDER, MOBS, WORLD_LIMIT } from '../src/data/world';
 import {
-  abilityLearned, acceptQuest, addXp, canChooseSpec, chooseSpec, completeQuest, newProgress, npcMarker, onItemLooted, onMobKilled,
-  onZoneEntered, parseSave, pointsAvailable, questStatus, rankUp, rankUpBlocker, respec,
+  SAVE_BACKUP_KEY, SAVE_KEY, abilityLearned, acceptQuest, addXp, canChooseSpec, chooseSpec, completeQuest, deleteSave, loadGame,
+  newProgress, npcMarker, onItemLooted, onMobKilled, onZoneEntered, parseSave, pointsAvailable, questStatus, rankUp, rankUpBlocker,
+  respec, saveGame,
 } from '../src/game/progress';
 import {
   MAX_LEVEL, emptyGear, itemScore, levelMod, makeItem, makeLegendary, makeRng, mitigation, mobStats, mobXp, playerStats,
@@ -241,6 +242,27 @@ describe('progress, quests and maps', () => {
     // Too many talent points for the level are refunded, not trusted.
     const cheat = parseSave(JSON.stringify({ ...p, level: 2, talents: { bw_hide: 5 } }));
     expect(cheat?.talents).toEqual({});
+  });
+
+  it('recovers the previous valid checkpoint if the active save is damaged', () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => { values.set(key, value); },
+      removeItem: (key: string) => { values.delete(key); },
+    };
+    const p = newProgress('Hero', 'stormblade');
+    expect(saveGame(p, storage)).toBe(true);
+    p.level = 2;
+    expect(saveGame(p, storage)).toBe(true);
+    values.set(SAVE_KEY, '{broken');
+    expect(loadGame(storage)?.level).toBe(1);
+    p.level = 3;
+    expect(saveGame(p, storage)).toBe(true);
+    expect(loadGame(storage)?.level).toBe(3);
+    deleteSave(storage);
+    expect(values.has(SAVE_KEY)).toBe(false);
+    expect(values.has(SAVE_BACKUP_KEY)).toBe(false);
   });
 
   it('migrates a version 1 save (3 gear slots, one map)', () => {

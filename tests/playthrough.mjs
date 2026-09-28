@@ -2,6 +2,7 @@
 // class and specialization, in simulated time, and reports time, deaths and level per act.
 // Usage: npm run playthrough            (all 9 paths)
 //        npm run playthrough frostweaver (one path)
+//        npm run playthrough all 777      (all paths, another random seed)
 import { chromium } from 'playwright';
 import { createServer } from 'vite';
 import { existsSync } from 'node:fs';
@@ -11,7 +12,8 @@ const ALL = [
   ['emberseer', 'pyromancer'], ['emberseer', 'frostweaver'], ['emberseer', 'thermancer'],
   ['thornkeeper', 'grovewarden'], ['thornkeeper', 'beastcaller'], ['thornkeeper', 'rotbloom'],
 ];
-const only = process.argv[2];
+const only = process.argv[2] && process.argv[2] !== 'all' ? process.argv[2] : null;
+const seed = Number(process.argv[3] ?? 12345);
 const runs = only ? ALL.filter(([c, s]) => s === only || c === only) : ALL;
 
 const server = await createServer({ server: { port: 5179, host: '127.0.0.1' }, logLevel: 'error' });
@@ -24,7 +26,7 @@ async function play([cls, spec]) {
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto('http://127.0.0.1:5179/');
+  await page.goto(`http://127.0.0.1:5179/?seed=${seed}`);
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page.getByText('New Hero').click();

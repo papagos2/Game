@@ -5,7 +5,7 @@ export type MobKind =
   | 'wolf' | 'spider' | 'raider' | 'brute' | 'chieftain' | 'imp' | 'boss'
   | 'rimewolf' | 'frostling' | 'yeti' | 'drowned' | 'thane' | 'shard' | 'ysolde'
   | 'scorpion' | 'nomad' | 'golem' | 'cultist' | 'warlord' | 'wisp' | 'azhkar';
-export type ModelKind = 'wolf' | 'spider' | 'humanoid' | 'brute' | 'boss' | 'imp';
+export type ModelKind = 'wolf' | 'spider' | 'humanoid' | 'brute' | 'boss' | 'dragon' | 'imp';
 export type MapId = 'vale' | 'frostmarch' | 'sunscar';
 
 export interface BossDef {
@@ -51,7 +51,7 @@ export const MOBS: Record<MobKind, MobDef> = {
   brute: { kind: 'brute', name: 'Ashbound Brute', model: 'brute', levels: [7, 9], hpMul: 1.25, dmgMul: 1.05, speed: 5, scale: 1, color: '#3a3533', accent: '#ff6a2a', slam: { radius: 5.5, every: 11, mul: 1.8 } },
   imp: { kind: 'imp', name: 'Cinder Imp', model: 'imp', levels: [8, 8], hpMul: 0.5, dmgMul: 0.4, speed: 7, scale: 1, color: '#c2410c', accent: '#ffd166', summon: true },
   boss: {
-    kind: 'boss', name: 'Varkul the Cindermaw', model: 'boss', levels: [10, 10], hpMul: 8, dmgMul: 1.1, speed: 5.2, scale: 1, color: '#2a1d1a', accent: '#ff5a1f', elite: true, respawn: 150,
+    kind: 'boss', name: 'Varkul the Cindermaw', model: 'dragon', levels: [10, 10], hpMul: 8, dmgMul: 1.1, speed: 5.2, scale: 1, color: '#2a1d1a', accent: '#ff5a1f', elite: true, respawn: 150,
     boss: { ring: { radius: 5.5, every: 8.5, delay: 1.9, frac: 0.25, color: '#ff3b2a' }, adds: 'imp', addsCount: 2, addsAt: [0.65, 0.35], enrageAt: 0.2, title: 'Varkul' },
   },
   // ---------------- Frostmarch (10-20) ----------------
