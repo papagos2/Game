@@ -10,7 +10,7 @@ Updated 2026-09-28. Active branch: `claude/zealous-cori-dkwd60` in `papagos2/Gam
 - `npm test` passes 14 tests, including recovery from a damaged active save.
 - `npm run smoke` passes in phone-sized Chromium on Windows: title, character creation, quest, touch movement, combat, menus, boss, death, reload and save. The updated Cindermaw boss was visually inspected in `tests/output/07-boss.png`. Software-rendered Chromium produced 7–9 FPS in samples; this is not device performance evidence.
 - `npm run playthrough` passes for all three classes with deterministic seed 12345 after the boss model update. The scripted bot finishes in 9–13 simulated minutes. Human playtime has not been measured.
-- `npx cap sync android` succeeds. [GitHub Actions run 36413686360](https://github.com/papagos2/Game/actions/runs/36413686360) built and uploaded the Android **debug APK** from commit `22f30da`. A local copy is at `../AshenveilAndroidBuild-22f30da/app-debug.apk` (6,985,765 bytes; SHA-256 `413C958024DBF12A441DE6D0C41B7B499A3679657EA1692BD5418369DF0BDBD3`). This verifies CI packaging, not launch on a phone.
+- `npx cap sync android` succeeds. [GitHub Actions run 36415812283](https://github.com/papagos2/Game/actions/runs/36415812283) built and uploaded the Android **debug APK** from commit `a90a92a`. A local copy is at `../AshenveilAndroidBuild-a90a92a/app-debug.apk` (6,986,381 bytes; SHA-256 `A51A9172560DB660A3F9DFA23F7DA430C9B75A1720CDC9ACA8AEA686469DE4F3`). This verifies CI packaging, not launch on a phone.
 - `npm audit --omit=dev` reported zero production dependency advisories on this date.
 
 ## Bugs found and fixed
@@ -25,7 +25,7 @@ Updated 2026-09-28. Active branch: `claude/zealous-cori-dkwd60` in `papagos2/Gam
 
 ## Not verified or not yet built
 
-- This computer has no verified Android SDK, ADB, or connected device. No Android or iOS device playtest, thermal test, frame-time profile, memory profile, touch ergonomics study, or native audio/lifecycle validation.
+- `adb` is not installed on PATH and no connected Android device appeared in the available Windows device list. No Android or iOS device playtest, thermal test, frame-time profile, memory profile, touch ergonomics study, or native audio/lifecycle validation.
 - No signed Android release bundle or iOS TestFlight build. iOS requires a Mac with Xcode and Apple signing.
 - The current art is intentionally low-poly procedural geometry, as confirmed by screenshots from the smoke test. It does not meet the requested realistic visual target. Full character/environment assets, rigging, animations, materials, and a mobile LOD pipeline are absent.
 - The current story is far short of a measured 50-hour game. The target cannot be met by renaming zones or repeating grind quests; it requires substantial authored content and blind human playtests.
