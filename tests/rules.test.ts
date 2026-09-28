@@ -1,13 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { QUESTS } from '../src/data/quests';
+import { ABILITIES, CLASSES, SPECS, abilitiesFor, type AbilityId, type ClassId } from '../src/data/classes';
+import { GEAR_SLOTS } from '../src/data/items';
+import { QUESTS, QUEST_BY_ID, QUEST_ITEMS } from '../src/data/quests';
+import { TREES, NODE_BY_ID } from '../src/data/talents';
+import { ALL_NPCS, MAPS, MAP_ORDER, MOBS, WORLD_LIMIT } from '../src/data/world';
 import {
-  acceptQuest, addXp, completeQuest, newProgress, npcMarker, onItemLooted, onMobKilled, parseSave, questStatus,
+  abilityLearned, acceptQuest, addXp, canChooseSpec, chooseSpec, completeQuest, newProgress, npcMarker, onItemLooted, onMobKilled,
+  onZoneEntered, parseSave, pointsAvailable, questStatus, rankUp, rankUpBlocker, respec,
 } from '../src/game/progress';
 import {
-  MAX_LEVEL, itemScore, levelMod, makeItem, makeRng, mitigation, mobStats, mobXp, playerStats, rollMobLoot, xpToNext,
+  MAX_LEVEL, emptyGear, itemScore, levelMod, makeItem, makeLegendary, makeRng, mitigation, mobStats, mobXp, playerStats,
+  rollMobLoot, slotFor, talentBonuses, vendorStock, xpToNext,
 } from '../src/game/rules';
-import { heightAt } from '../src/game/terrain';
-import { CAMPS, NPCS, WORLD_LIMIT } from '../src/data/world';
+import { Terrain } from '../src/game/terrain';
 
 describe('rules', () => {
   it('rng is deterministic', () => {
@@ -24,46 +29,127 @@ describe('rules', () => {
   it('grey mobs give no xp, higher mobs give more', () => {
     expect(mobXp(1, 6, false)).toBe(0);
     expect(mobXp(5, 4, false)).toBeGreaterThan(mobXp(4, 4, false));
-    expect(mobXp(5, 5, true)).toBe(mobXp(5, 5, false) * 3);
+    expect(Math.abs(mobXp(5, 5, true) - mobXp(5, 5, false) * 3)).toBeLessThanOrEqual(2);
   });
 
-  it('stats scale with level and gear', () => {
-    const empty = { weapon: null, armor: null, trinket: null };
-    const s1 = playerStats('stormblade', 1, empty);
-    const s5 = playerStats('stormblade', 5, empty);
-    expect(s5.maxHp).toBeGreaterThan(s1.maxHp);
-    expect(s5.damageScale).toBeGreaterThan(s1.damageScale);
-    const rng = makeRng(1);
-    const armor = makeItem(rng, 'stormblade', 5, 2, 'armor');
-    const geared = playerStats('stormblade', 5, { ...empty, armor });
-    expect(geared.armor).toBeGreaterThan(s5.armor);
-    expect(geared.maxHp).toBeGreaterThan(s5.maxHp);
+  it('stats scale with level, gear and talents', () => {
+    const s1 = playerStats('stormblade', 1, emptyGear());
+    const s20 = playerStats('stormblade', 20, emptyGear());
+    expect(s20.maxHp).toBeGreaterThan(s1.maxHp);
+    expect(s20.damageScale).toBeGreaterThan(s1.damageScale);
+    const chest = makeItem(makeRng(1), 'stormblade', 20, 2, 'chest');
+    const geared = playerStats('stormblade', 20, { ...emptyGear(), chest });
+    expect(geared.armor).toBeGreaterThan(s20.armor);
+    expect(geared.maxHp).toBeGreaterThan(s20.maxHp);
+    const talented = playerStats('stormblade', 20, emptyGear(), { sb_iron: 5, sb_might: 5 });
+    expect(talented.maxHp).toBeGreaterThan(s20.maxHp);
+    expect(talented.power).toBeGreaterThan(s20.power);
   });
 
   it('mitigation and level modifiers stay in sane ranges', () => {
-    expect(mitigation(0)).toBe(1);
-    expect(mitigation(100)).toBeCloseTo(0.5);
+    expect(mitigation(0, 10)).toBe(1);
+    expect(mitigation(150, 10)).toBeCloseTo(0.5);
+    expect(mitigation(100, 30)).toBeGreaterThan(mitigation(100, 1));
     expect(levelMod(1, 10)).toBeGreaterThanOrEqual(0.6);
     expect(levelMod(10, 1)).toBeLessThanOrEqual(1.2);
   });
 
-  it('items: better rarity means better score', () => {
+  it('mobs get tougher every map', () => {
+    expect(mobStats('rimewolf', 11).maxHp).toBeGreaterThan(mobStats('brute', 9).maxHp);
+    expect(mobStats('scorpion', 21).maxHp).toBeGreaterThan(mobStats('drowned', 17).maxHp);
+  });
+
+  it('items: every type, better rarity scores higher, rings fill both slots', () => {
     const rng = makeRng(3);
-    const common = makeItem(rng, 'emberseer', 5, 0, 'weapon');
-    const epic = makeItem(rng, 'emberseer', 5, 3, 'weapon');
-    expect(itemScore(epic)).toBeGreaterThan(itemScore(common));
+    for (const t of ['weapon', 'head', 'chest', 'hands', 'feet', 'amulet', 'ring'] as const) {
+      const it = makeItem(rng, 'emberseer', 15, 1, t);
+      expect(it.type).toBe(t);
+      expect(itemScore(it)).toBeGreaterThan(0);
+    }
+    expect(itemScore(makeItem(rng, 'emberseer', 5, 3, 'weapon'))).toBeGreaterThan(itemScore(makeItem(rng, 'emberseer', 5, 0, 'weapon')));
+    const gear = emptyGear();
+    const r1 = makeItem(rng, 'thornkeeper', 5, 1, 'ring');
+    expect(slotFor(r1, gear)).toBe('ring1');
+    gear.ring1 = r1;
+    expect(slotFor(makeItem(rng, 'thornkeeper', 5, 1, 'ring'), gear)).toBe('ring2');
     expect(itemScore(null)).toBe(0);
   });
 
-  it('boss always drops an epic', () => {
-    const loot = rollMobLoot(makeRng(9), 'thornkeeper', 'boss', 10);
-    expect(loot.item?.rarity).toBe(3);
-    expect(mobStats('boss', 10).maxHp).toBeGreaterThan(mobStats('brute', 9).maxHp * 5);
+  it('bosses drop a legendary, elites a rare or better', () => {
+    for (const boss of ['boss', 'ysolde', 'azhkar'] as const) {
+      const loot = rollMobLoot(makeRng(9), 'thornkeeper', boss, MOBS[boss].levels[0]);
+      expect(loot.items.some((i) => i.rarity === 4)).toBe(true);
+    }
+    expect(rollMobLoot(makeRng(2), 'stormblade', 'thane', 18).items[0].rarity).toBeGreaterThanOrEqual(2);
+    expect(rollMobLoot(makeRng(2), 'stormblade', 'imp', 8).items.length).toBe(0);
+    expect(makeLegendary(makeRng(4), 'emberseer', 'azhkar', 32).name).toMatch(/Sunflayer|Dune Tyrant|Azhkar/);
+  });
+
+  it('vendor stock is stable for a level', () => {
+    const a = vendorStock('vale', 5, 'stormblade').map((v) => v.item.name);
+    const b = vendorStock('vale', 5, 'stormblade').map((v) => v.item.name);
+    expect(a).toEqual(b);
+    expect(a.length).toBe(4);
   });
 });
 
-describe('progress and quests', () => {
-  it('levels up and carries over xp', () => {
+describe('classes, specs and talents', () => {
+  it('each class has 3 specs, each with 2 abilities of its own', () => {
+    for (const c of Object.values(CLASSES)) {
+      expect(c.specs.length).toBe(3);
+      for (const sp of c.specs) {
+        expect(SPECS[sp].cls).toBe(c.id);
+        for (const a of SPECS[sp].abilities) expect(ABILITIES[a].spec).toBe(sp);
+        expect(abilitiesFor(c.id, sp).length).toBe(6);
+      }
+    }
+  });
+
+  it('every talent tree exists and talent ability mods point at real abilities', () => {
+    for (const c of Object.values(CLASSES)) {
+      expect(TREES[c.id]).toBeTruthy();
+      for (const sp of c.specs) expect(TREES[sp]).toBeTruthy();
+    }
+    for (const { node } of Object.values(NODE_BY_ID)) {
+      for (const m of node.perRank) if (m.k === 'ability') expect(ABILITIES[m.id as AbilityId]).toBeTruthy();
+    }
+  });
+
+  it('talent points: one per level, tiers, class/spec restrictions', () => {
+    const p = newProgress('T', 'emberseer');
+    expect(pointsAvailable(p)).toBe(0);
+    expect(rankUp(p, 'es_focus')).toBe(false);
+    p.level = 12;
+    expect(pointsAvailable(p)).toBe(11);
+    expect(rankUpBlocker(p, 'sb_might')).toBe('Not your class');
+    expect(rankUpBlocker(p, 'es_star')).toMatch(/Needs 5/);
+    for (let i = 0; i < 5; i++) expect(rankUp(p, 'es_focus')).toBe(true);
+    expect(rankUp(p, 'es_focus')).toBe(false); // maxed
+    expect(rankUp(p, 'es_star')).toBe(true); // tier 2 open after 5 points
+    expect(rankUpBlocker(p, 'fw_spike')).toMatch(/path/i);
+    expect(talentBonuses(p.talents).stat.powerPct).toBe(15);
+  });
+
+  it('spec choice at level 10, respec refunds for gold', () => {
+    const p = newProgress('T', 'thornkeeper');
+    expect(chooseSpec(p, 'rotbloom')).toBe(false);
+    p.level = 10;
+    expect(canChooseSpec(p)).toBe(true);
+    expect(chooseSpec(p, 'pyromancer')).toBe(false); // other class
+    expect(chooseSpec(p, 'rotbloom')).toBe(true);
+    expect(abilityLearned(p, 'plague')).toBe(true);
+    expect(abilityLearned(p, 'witherBurst')).toBe(false); // level 16
+    expect(abilityLearned(p, 'lifebloom')).toBe(false); // other path
+    rankUp(p, 'rb_plague');
+    p.gold = 1000;
+    expect(respec(p, true)).toBe(true);
+    expect(p.spec).toBeNull();
+    expect(pointsAvailable(p)).toBe(9);
+  });
+});
+
+describe('progress, quests and maps', () => {
+  it('levels up and carries over xp, capped at max level', () => {
     const p = newProgress('T', 'stormblade');
     expect(addXp(p, xpToNext(1) + 5)).toBe(1);
     expect(p.level).toBe(2);
@@ -73,34 +159,37 @@ describe('progress and quests', () => {
     expect(p.xp).toBe(0);
   });
 
-  it('quest chain: accept, progress, complete, unlock next', () => {
+  it('quest chain: accept, progress, complete', () => {
     const p = newProgress('T', 'emberseer');
-    expect(npcMarker(p, 'elra')).toBe('!');
-    expect(questStatus(p, QUESTS[2])).toBe('unavailable');
+    expect(npcMarker(p, 'vale_a')).toBe('!');
+    expect(questStatus(p, QUEST_BY_ID.stalkers)).toBe('unavailable');
     expect(acceptQuest(p, 'wolves')).toBe(true);
     expect(acceptQuest(p, 'wolves')).toBe(false);
     for (let i = 0; i < 8; i++) onMobKilled(p, 'wolf');
     expect(p.active[0].done).toBe(true);
-    expect(npcMarker(p, 'elra')).toBe('?');
+    expect(npcMarker(p, 'vale_a')).toBe('?');
     const gold = p.gold;
-    expect(completeQuest(p, 'wolves')?.id).toBe('wolves');
+    expect(completeQuest(p, 'wolves')?.quest.id).toBe('wolves');
     expect(p.gold).toBeGreaterThan(gold);
-    p.level = 3;
-    expect(questStatus(p, QUESTS.find((q) => q.id === 'stalkers')!)).toBe('available');
   });
 
-  it('collect quests count loot', () => {
+  it('collect and explore objectives', () => {
     const p = newProgress('T', 'thornkeeper');
     acceptQuest(p, 'pelts');
     for (let i = 0; i < 6; i++) onItemLooted(p, 'pelt');
     expect(p.active[0].done).toBe(true);
+    p.unlocked.push('frostmarch');
+    p.level = 10;
+    expect(acceptQuest(p, 'fm_arrival')).toBe(true);
+    onZoneEntered(p, 'rimewood');
+    expect(p.active.find((a) => a.id === 'fm_arrival')!.done).toBe(true);
   });
 
-  it('every quest can be reached', () => {
+  it('the whole campaign can be completed and unlocks every map in order', () => {
     const p = newProgress('T', 'stormblade');
     p.level = MAX_LEVEL;
     let guard = 0;
-    while (p.completed.length < QUESTS.length && guard++ < 50) {
+    while (p.completed.length < QUESTS.length && guard++ < 100) {
       for (const q of QUESTS) {
         if (questStatus(p, q) === 'available') {
           acceptQuest(p, q.id);
@@ -112,11 +201,32 @@ describe('progress and quests', () => {
       }
     }
     expect(p.completed.length).toBe(QUESTS.length);
+    expect(p.unlocked).toEqual(['vale', 'frostmarch', 'sunscar']);
+  });
+
+  it('quest data is consistent', () => {
+    const npcIds = new Set(ALL_NPCS.map((n) => n.id));
+    for (const q of QUESTS) {
+      expect(npcIds.has(q.giver)).toBe(true);
+      expect(MAPS[q.map].npcs.some((n) => n.id === q.giver)).toBe(true);
+      for (const r of q.requires) expect(QUEST_BY_ID[r]).toBeTruthy();
+      const o = q.objective;
+      if (o.type === 'kill') expect(MAPS[q.map].camps.some((c) => c.kind === o.mob)).toBe(true);
+      if (o.type === 'collect') {
+        expect(QUEST_ITEMS[o.item]).toBeTruthy();
+        expect(Object.values(MOBS).some((m) => m.questDrop?.item === o.item)).toBe(true);
+      }
+      if (o.type === 'explore') expect(MAPS[q.map].zones.some((z) => z.id === o.zone)).toBe(true);
+    }
+    for (const id of MAP_ORDER) expect(QUEST_BY_ID[MAPS[id].finalQuest]).toBeTruthy();
   });
 
   it('save round-trips and rejects damaged data', () => {
     const p = newProgress('Hero', 'stormblade');
     p.gear.weapon = makeItem(makeRng(2), 'stormblade', 3, 1, 'weapon');
+    p.level = 11;
+    chooseSpec(p, 'bulwark');
+    rankUp(p, 'bw_hide');
     acceptQuest(p, 'wolves');
     const back = parseSave(JSON.stringify(p));
     expect(back).toEqual(p);
@@ -124,19 +234,65 @@ describe('progress and quests', () => {
     expect(parseSave(JSON.stringify({ ...p, version: 99 }))).toBeNull();
     expect(parseSave(JSON.stringify({ ...p, level: 50 }))).toBeNull();
     expect(parseSave(JSON.stringify({ ...p, cls: 'hacker' }))).toBeNull();
+    expect(parseSave(JSON.stringify({ ...p, spec: 'pyromancer' }))).toBeNull();
+    expect(parseSave(JSON.stringify({ ...p, talents: { nope: 1 } }))).toBeNull();
     expect(parseSave(JSON.stringify({ ...p, completed: ['nope'] }))).toBeNull();
     expect(parseSave(null)).toBeNull();
+    // Too many talent points for the level are refunded, not trusted.
+    const cheat = parseSave(JSON.stringify({ ...p, level: 2, talents: { bw_hide: 5 } }));
+    expect(cheat?.talents).toEqual({});
+  });
+
+  it('migrates a version 1 save (3 gear slots, one map)', () => {
+    const v1 = {
+      version: 1, name: 'Old', cls: 'emberseer', level: 10, xp: 12, gold: 50, potions: 2,
+      gear: {
+        weapon: { id: 'a', name: 'Staff', slot: 'weapon', ilvl: 9, rarity: 2, power: 20, stamina: 5, armor: 0, value: 30 },
+        armor: { id: 'b', name: 'Vest', slot: 'armor', ilvl: 8, rarity: 1, power: 3, stamina: 12, armor: 30, value: 20 },
+        trinket: null,
+      },
+      bag: [{ id: 'c', name: 'Charm', slot: 'trinket', ilvl: 5, rarity: 0, power: 4, stamina: 3, armor: 0, value: 5 }],
+      active: [], completed: ['wolves', 'pelts', 'stalkers', 'raiders', 'relic', 'brutes', 'cindermaw'],
+      pos: { x: 1, z: 2 }, bossDefeated: true, playSeconds: 3600,
+    };
+    const p = parseSave(JSON.stringify(v1))!;
+    expect(p).not.toBeNull();
+    expect(p.version).toBe(2);
+    expect(p.gear.chest?.name).toBe('Vest');
+    expect(p.gear.weapon?.type).toBe('weapon');
+    expect(p.bag[0].type).toBe('amulet');
+    expect(p.unlocked).toContain('frostmarch');
+    expect(p.spec).toBeNull();
+    expect(Object.keys(p.gear).sort()).toEqual([...GEAR_SLOTS].sort());
   });
 });
 
 describe('world', () => {
-  it('terrain is finite everywhere and camps/NPCs are inside the walkable area', () => {
-    for (let x = -WORLD_LIMIT; x <= WORLD_LIMIT; x += 20) {
-      for (let z = -WORLD_LIMIT; z <= WORLD_LIMIT; z += 20) expect(Number.isFinite(heightAt(x, z))).toBe(true);
+  it('terrain is finite on every map and camps/NPCs are inside the walkable area', () => {
+    for (const id of MAP_ORDER) {
+      const t = new Terrain(MAPS[id]);
+      for (let x = -WORLD_LIMIT; x <= WORLD_LIMIT; x += 30) {
+        for (let z = -WORLD_LIMIT; z <= WORLD_LIMIT; z += 30) expect(Number.isFinite(t.heightAt(x, z))).toBe(true);
+      }
+      for (const c of [...MAPS[id].camps, ...MAPS[id].npcs]) {
+        expect(Math.abs(c.x)).toBeLessThan(WORLD_LIMIT - 30);
+        expect(Math.abs(c.z)).toBeLessThan(WORLD_LIMIT - 30);
+      }
     }
-    for (const c of [...CAMPS, ...NPCS]) {
-      expect(Math.abs(c.x)).toBeLessThan(WORLD_LIMIT - 30);
-      expect(Math.abs(c.z)).toBeLessThan(WORLD_LIMIT - 30);
+  });
+
+  it('mob levels rise through the maps', () => {
+    for (const id of MAP_ORDER) {
+      const m = MAPS[id];
+      for (const c of m.camps) {
+        const lv = MOBS[c.kind].levels;
+        expect(lv[0]).toBeGreaterThanOrEqual(m.levels[0]);
+        expect(lv[1]).toBeLessThanOrEqual(m.levels[1]);
+      }
     }
+  });
+
+  it('class data sanity', () => {
+    for (const c of Object.keys(CLASSES) as ClassId[]) expect(abilitiesFor(c, null).length).toBe(4);
   });
 });

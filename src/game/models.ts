@@ -274,14 +274,16 @@ function collectMaterials(rig: Rig) {
   rig.materials = [...set];
 }
 
-export function buildPlayerModel(cls: ClassId): Rig {
+/** The hero. `glow` recolours weapon and eyes, e.g. to show the chosen specialization. */
+export function buildPlayerModel(cls: ClassId, glow?: string): Rig {
   const c = CLASSES[cls].colors;
+  const g = glow ?? c.glow;
   const rig =
     cls === 'stormblade'
-      ? humanoid({ body: c.body, trim: c.trim, skin: '#e0b48f', weapon: 'sword', glow: c.glow, bulk: 1.1, cape: '#1d2f55' })
+      ? humanoid({ body: c.body, trim: c.trim, skin: '#e0b48f', weapon: 'sword', glow: g, bulk: 1.1, cape: '#1d2f55' })
       : cls === 'emberseer'
-        ? humanoid({ body: c.body, trim: c.trim, skin: '#d9a57e', weapon: 'staff', glow: c.glow, hood: true, cape: '#5a1a12' })
-        : humanoid({ body: c.body, trim: c.trim, skin: '#c89370', weapon: 'crook', glow: c.glow, horns: true, cape: '#26401f' });
+        ? humanoid({ body: c.body, trim: c.trim, skin: '#d9a57e', weapon: 'staff', glow: g, hood: true, cape: '#5a1a12' })
+        : humanoid({ body: c.body, trim: c.trim, skin: '#c89370', weapon: 'crook', glow: g, horns: true, cape: '#26401f' });
   collectMaterials(rig);
   return rig;
 }
@@ -319,7 +321,15 @@ export function buildMobModel(def: MobDef): Rig {
   return rig;
 }
 
-export function buildSpiritWolf(): Rig {
+/** Companion models. */
+export function buildPet(kind: 'spiritWolf' | 'bear'): Rig {
+  if (kind === 'spiritWolf') return buildSpiritWolf();
+  const rig = quadruped('#6a4a30', '#3a2a1a', 1.7, '#ffcc55');
+  collectMaterials(rig);
+  return rig;
+}
+
+function buildSpiritWolf(): Rig {
   const rig = quadruped('#9fe8ff', '#e0f8ff', 1.05, '#ffffff');
   rig.root.traverse((o) => {
     const mesh = o as THREE.Mesh;

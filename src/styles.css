@@ -140,7 +140,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
   margin-top: 4px; text-align: center; font-family: var(--title); font-size: 11px; font-weight: 600;
   color: var(--gold); text-shadow: 0 1px 3px #000;
 }
-#menuButtons { display: flex; flex-direction: column; gap: 6px; }
+#menuButtons { display: grid; grid-template-columns: repeat(2, auto); gap: 6px; align-content: start; }
 .round {
   width: 46px; height: 46px; border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, #3b3040, #16111a);
@@ -153,8 +153,8 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 
 /* ---------- Quest tracker ---------- */
 #tracker {
-  position: absolute; right: calc(10px + var(--safe-r)); top: calc(170px + var(--safe-t));
-  width: 200px; font-size: 12px; text-shadow: 0 1px 3px #000, 0 0 6px rgba(0,0,0,0.8);
+  position: absolute; left: calc(12px + var(--safe-l)); top: calc(96px + var(--safe-t));
+  width: 220px; font-size: 12px; text-shadow: 0 1px 3px #000, 0 0 6px rgba(0,0,0,0.8);
 }
 #tracker .tq { margin-bottom: 7px; }
 #tracker .tq b { display: block; font-family: var(--title); font-size: 12px; color: var(--gold); }
@@ -165,7 +165,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 #actionBar {
   position: absolute;
   right: calc(16px + var(--safe-r)); bottom: calc(24px + var(--safe-b));
-  width: 280px; height: 220px;
+  width: 340px; height: 260px;
 }
 .ab {
   position: absolute; border-radius: 50%;
@@ -194,6 +194,56 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 .ab-main .label { position: absolute; bottom: 12px; left: 0; right: 0; text-align: center; font-size: 10px; font-weight: 800; text-shadow: 0 1px 2px #000; letter-spacing: 0.04em; }
 .ab-s { width: 64px; height: 64px; }
 .ab-p { width: 50px; height: 50px; }
+.ab-spec { width: 60px; height: 60px; border-color: #b58cff; box-shadow: 0 3px 10px rgba(0,0,0,0.6), 0 0 10px rgba(181,140,255,0.35); }
+.round { position: relative; }
+.badge {
+  position: absolute; top: -4px; right: -4px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px;
+  background: #ffd84a; color: #221708; font-size: 12px; font-weight: 900; display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 0 10px rgba(255,216,74,0.7); animation: pulse 1.6s ease-in-out infinite;
+}
+@keyframes pulse { 50% { transform: scale(1.15); } }
+
+/* Skills */
+.skillsPanel { width: min(960px, 100%); }
+.tabs { display: flex; gap: 8px; margin: 10px 0; }
+.tab {
+  padding: 9px 14px; border-radius: 9px; min-height: 42px; font-weight: 800; font-size: 13px;
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); color: var(--ink-dim);
+}
+.tab.on { background: rgba(216,179,106,0.15); border-color: var(--gold); color: var(--ink); }
+.tab:disabled { opacity: 0.5; }
+.skillCols { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; }
+.talents { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; align-content: start; }
+.talent {
+  position: relative; text-align: left; padding: 10px 12px 10px 12px; border-radius: 10px; min-height: 72px;
+  background: rgba(255,255,255,0.035); border: 1px solid rgba(255,255,255,0.12);
+  display: flex; flex-direction: column; gap: 3px;
+}
+.talent b { font-family: var(--title); font-size: 13px; color: var(--ink); padding-right: 36px; }
+.talent .td { font-size: 11.5px; color: var(--ink-dim); line-height: 1.35; }
+.talent .tr { position: absolute; top: 8px; right: 10px; font-size: 12px; font-weight: 900; color: var(--gold); }
+.talent .tl { font-size: 10.5px; color: #ff9b8a; font-weight: 700; }
+.talent.has { border-color: rgba(216,179,106,0.6); background: rgba(216,179,106,0.08); }
+.talent.max { border-color: #6ee07a; }
+.talent.max .tr { color: #6ee07a; }
+.talent.tlock { opacity: 0.55; }
+.talent[aria-disabled="true"]:not(.has) { filter: saturate(0.6); }
+.abilityList h3 { margin-top: 0; }
+.abRow { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 12px; }
+.abRow .icon { width: 34px; height: 34px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center; }
+.abRow .icon svg { width: 60%; height: 60%; }
+.abRow b { font-size: 13px; }
+.abRow small { color: var(--gold); }
+.abRow span { color: var(--ink-dim); }
+.abRow.dim { opacity: 0.5; }
+.specCard p { display: block !important; }
+.specAbs { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.specAbs > div { display: flex; gap: 8px; align-items: flex-start; font-size: 11.5px; color: var(--ink-dim); }
+.specAbs .icon { width: 30px; height: 30px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center; }
+.specAbs .icon svg { width: 60%; height: 60%; }
+.specAbs b { color: var(--ink); }
+.dialog.wide { width: min(760px, 100%); }
+.questItem:disabled { cursor: default; }
 
 #talkBtn {
   position: absolute; left: 50%; bottom: calc(110px + var(--safe-b)); transform: translateX(-50%);
@@ -282,7 +332,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
   display: flex; align-items: center; justify-content: center;
   padding: calc(12px + var(--safe-t)) calc(16px + var(--safe-r)) calc(12px + var(--safe-b)) calc(16px + var(--safe-l));
 }
-.screen.dim { background: rgba(6, 4, 8, 0.6); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); }
+.screen.dim { background: rgba(6, 4, 8, 0.66); }
 .panel {
   position: relative;
   background: linear-gradient(180deg, rgba(34,27,38,0.97), rgba(18,14,20,0.97));
@@ -396,10 +446,12 @@ input.name {
   #minimap, #minimapWrap { width: 104px; height: 104px; }
   #minimapWrap { height: auto; }
   .round { width: 40px; height: 40px; font-size: 9px; }
-  #tracker { top: calc(136px + var(--safe-t)); width: 170px; font-size: 11px; }
+  #tracker { top: calc(92px + var(--safe-t)); width: 200px; font-size: 11px; }
   #actionBar { transform: scale(0.8); transform-origin: right bottom; }
   .classes { gap: 8px; }
   .classCard p { display: none; }
+  .skillCols { grid-template-columns: 1fr; }
+  .abilityList .abRow span { font-size: 11px; }
   .classCard { padding: 10px; }
   .bagCols { grid-template-columns: 200px 1fr; gap: 14px; }
   .stats { line-height: 1.55; }
@@ -409,6 +461,7 @@ input.name {
 }
 @media (max-width: 600px) {
   .bagCols { grid-template-columns: 1fr; }
+  .talents { grid-template-columns: 1fr; }
   .classes { grid-template-columns: 1fr; }
 }
 @media (max-width: 700px) {

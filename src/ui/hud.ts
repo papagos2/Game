@@ -1,10 +1,11 @@
 // In-game HUD: unit frames, action buttons, minimap, quest tracker, nameplates and floating text.
 import * as THREE from 'three';
-import { ABILITIES, CLASSES, POTION } from '../data/classes';
+import { ABILITIES, CLASSES, POTION, SPECS } from '../data/classes';
 import { QUEST_BY_ID } from '../data/quests';
-import { CAMPS, MOBS, NPCS, WORLD_LIMIT } from '../data/world';
+import { ALL_NPCS, MOBS, WORLD_LIMIT } from '../data/world';
+import { abilityCost } from '../game/abilities';
 import type { Game } from '../game/game';
-import { npcMarker } from '../game/progress';
+import { abilityLearned, canChooseSpec, nextQuestLevel, npcMarker, pointsAvailable } from '../game/progress';
 import { levelColor, xpToNext } from '../game/rules';
 import type { Unit } from '../game/units';
 import { iconHtml } from './icons';
@@ -24,13 +25,14 @@ export class Hud {
   private buttons: { el: HTMLButtonElement; cd: HTMLDivElement; cdText: HTMLDivElement; kind: string; count?: HTMLDivElement }[] = [];
   private mini: CanvasRenderingContext2D;
   private last: Record<string, string | number> = {};
+  private barKey = '';
 
-  constructor(private game: Game, handlers: { bag: () => void; quests: () => void; menu: () => void; talk: () => void }) {
+  constructor(private game: Game, handlers: { bag: () => void; quests: () => void; menu: () => void; talk: () => void; skills: () => void }) {
     const cls = CLASSES[game.progress.cls];
-    $('pPortrait').innerHTML = iconHtml(ABILITIES[cls.abilities[0]].glyph, [cls.colors.glow, cls.colors.body]);
     $('pRes').className = `fill ${cls.resource}`;
     this.mini = ($('minimap') as HTMLCanvasElement).getContext('2d')!;
     this.buildActionBar();
+    $('btnSkills').onclick = handlers.skills;
     $('btnBag').onclick = handlers.bag;
     $('btnQuests').onclick = handlers.quests;
     $('btnMenu').onclick = handlers.menu;
@@ -48,6 +50,10 @@ export class Hud {
     this.buttons = [];
     const g = this.game;
     const cls = CLASSES[g.progress.cls];
+    const spec = g.progress.spec;
+    this.barKey = `${spec}`;
+    const portrait = spec ? iconHtml(SPECS[spec].glyph, [SPECS[spec].color, cls.colors.body]) : iconHtml(ABILITIES[cls.abilities[0]].glyph, [cls.colors.glow, cls.colors.body]);
+    $('pPortrait').innerHTML = portrait;
     const make = (cls2: string, x: number, y: number, html: string, kind: string, onPress: () => void, label: string) => {
       const b = document.createElement('button');
       b.className = `ab ${cls2}`;
@@ -71,22 +77,21 @@ export class Hud {
       return entry;
     };
     make('ab-main', 0, 0, `${iconHtml(cls.ranged ? 'bolt' : 'sword', [cls.colors.glow, '#2a2030'])}<div class="label">ATTACK</div>`, 'main', () => g.mainAction(), 'Attack');
-    // Arc of four abilities around the main button.
-    const pos: [number, number][] = [[149, 14], [131, 82], [82, 131], [14, 149]];
-    cls.abilities.forEach((id, i) => {
-      const ab = ABILITIES[id];
-      const e = make('ab-s', pos[i][0], pos[i][1], iconHtml(ab.glyph, ab.color), id, () => g.useAbility(id), ab.name);
+    // Inner arc: four class abilities. Outer arc: the two abilities of the chosen path.
+    const pos: [number, number][] = [[149, 14], [131, 82], [82, 131], [14, 149], [209, 86], [112, 197]];
+    g.abilityList().forEach((ab, i) => {
+      const e = make(i < 4 ? 'ab-s' : 'ab-s ab-spec', pos[i][0], pos[i][1], iconHtml(ab.glyph, ab.color), ab.id, () => g.useAbility(ab.id), ab.name);
       const lock = document.createElement('div');
       lock.className = 'lockText';
       lock.textContent = `Lv ${ab.unlockLevel}`;
       e.el.appendChild(lock);
     });
-    const p = make('ab-p', 224, 12, iconHtml(POTION.glyph, POTION.color), 'potion', () => g.usePotion(), POTION.name);
+    const p = make('ab-p', 232, 10, iconHtml(POTION.glyph, POTION.color), 'potion', () => g.usePotion(), POTION.name);
     const c = document.createElement('div');
     c.className = 'count';
     p.el.appendChild(c);
     p.count = c;
-    const t = make('ab-p', 206, 100, iconHtml('leap', ['#d8d0c0', '#3a3440']), 'cycle', () => g.cycleTarget(), 'Next target');
+    const t = make('ab-p', 282, 150, iconHtml('leap', ['#d8d0c0', '#3a3440']), 'cycle', () => g.cycleTarget(), 'Next target');
     t.el.querySelector('.icon')!.innerHTML = '<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="26" fill="none" stroke="#fff" stroke-width="7"/><path d="M50 8v22M50 70v22M8 50h22M70 50h22" stroke="#fff" stroke-width="7" stroke-linecap="round"/></svg>';
   }
 
@@ -138,7 +143,13 @@ export class Hud {
     const g = this.game;
     const list = g.questCounts();
     if (!list.length) {
-      const hint = g.progress.completed.length === 0 ? '<div class="tq"><b>Welcome to Hearthmoor</b><span>Talk to the villagers marked with <b style="display:inline;color:#ffd84a">!</b></span></div>' : '';
+      const p = g.progress;
+      const hub = g.map.zones[0].name;
+      const hasOffer = g.npcs.some((n) => npcMarker(p, n.npc!.id) !== '');
+      const next = nextQuestLevel(p, g.map.id);
+      let hint = '';
+      if (hasOffer) hint = `<div class="tq"><b>${escapeHtml(hub)}</b><span>Talk to the villagers marked with <b style="display:inline;color:#ffd84a">!</b></span></div>`;
+      else if (next) hint = `<div class="tq"><b>Grow stronger</b><span>New quests at level ${next}. Hunt in the wilds.</span></div>`;
       $('tracker').innerHTML = hint;
       return;
     }
@@ -152,6 +163,11 @@ export class Hud {
     const pl = g.player;
     const p = g.progress;
     const cls = CLASSES[p.cls];
+    if (this.barKey !== `${p.spec}`) this.buildActionBar();
+    // Skills badge: unspent points or a path to choose.
+    const pts = pointsAvailable(p);
+    this.set('skillBadge', 'text', canChooseSpec(p) ? '!' : pts > 0 ? String(pts) : '');
+    $('skillBadge').hidden = !(canChooseSpec(p) || pts > 0);
     // Player frame.
     this.set('pName', 'text', p.name);
     this.set('pLevel', 'text', `Lv ${p.level}`);
@@ -165,7 +181,9 @@ export class Hud {
     if (shieldFrac > 0) buffs.push(`<div class="buff">${iconHtml('shield', ABILITIES.staticGuard.color)}</div>`);
     if (pl.dots.some((d) => d.heal)) buffs.push(`<div class="buff">${iconHtml('leaf', ABILITIES.renewal.color)}</div>`);
     if (pl.dots.some((d) => !d.heal)) buffs.push(`<div class="buff">${iconHtml('thorn', ['#9be26a', '#3a1a3a'])}</div>`);
-    if (g.pet) buffs.push(`<div class="buff">${iconHtml('paw', ABILITIES.spiritWolf.color)}</div>`);
+    if (g.pets.length) buffs.push(`<div class="buff">${iconHtml('paw', ABILITIES.spiritWolf.color)}</div>`);
+    if (pl.guardUntil > g.now) buffs.push(`<div class="buff">${iconHtml('shield', ['#e6d7b0', '#5a4a2a'])}</div>`);
+    if (pl.slowed(g.now)) buffs.push(`<div class="buff">${iconHtml('snow', ['#bfefff', '#1a4a8a'])}</div>`);
     this.set('pBuffs', 'html', buffs.join(''));
 
     // Target frame.
@@ -203,9 +221,9 @@ export class Hud {
       } else {
         const ab = ABILITIES[b.kind as keyof typeof ABILITIES];
         left = g.cooldownLeft(ab.id);
-        total = ab.cooldown;
-        b.el.classList.toggle('locked', p.level < ab.unlockLevel);
-        b.el.classList.toggle('nores', g.resource < ab.cost);
+        total = g.cooldownTotal(ab.id);
+        b.el.classList.toggle('locked', !abilityLearned(p, ab.id));
+        b.el.classList.toggle('nores', g.resource < abilityCost(g, ab.id));
       }
       const frac = left > 0 ? left / total : 0;
       const bg = frac > 0 ? `conic-gradient(rgba(0,0,0,0.68) ${frac * 360}deg, transparent 0)` : 'none';
@@ -247,7 +265,7 @@ export class Hud {
     const seen = new Set<Unit>();
     const candidates: Unit[] = [...g.npcs];
     for (const u of g.units) if (!u.dead && u.distTo(pl) < 38) candidates.push(u);
-    if (g.pet) candidates.push(g.pet);
+    candidates.push(...g.pets);
     for (const u of candidates) {
       const d = u.distTo(pl);
       if (d > 45) continue;
@@ -277,7 +295,7 @@ export class Hud {
     }
     for (const [u, plate] of this.plates) {
       if (!seen.has(u)) {
-        if (!g.units.includes(u) && !g.npcs.includes(u) && g.pet !== u) {
+        if (!g.units.includes(u) && !g.npcs.includes(u) && !g.pets.includes(u)) {
           plate.el.remove();
           this.plates.delete(u);
         } else plate.el.style.display = 'none';
@@ -371,8 +389,15 @@ export class Hud {
         if (n) goals.push({ x: n.pos.x, z: n.pos.z, r: 0 });
         continue;
       }
-      const kind = q.objective.type === 'kill' ? q.objective.mob : Object.values(MOBS).find((m) => m.questDrop?.item === (q.objective as { item: string }).item)?.kind;
-      for (const c of CAMPS) if (c.kind === kind) goals.push({ x: c.x, z: c.z, r: Math.max(8, c.spread) });
+      if (q.map !== g.map.id) continue;
+      const o = q.objective;
+      if (o.type === 'explore') {
+        const zn = g.map.zones.find((z) => z.id === o.zone);
+        if (zn) goals.push({ x: zn.x, z: zn.z, r: zn.radius * 0.5 });
+        continue;
+      }
+      const kind = o.type === 'kill' ? o.mob : Object.values(MOBS).find((m) => m.questDrop?.item === o.item)?.kind;
+      for (const c of g.map.camps) if (c.kind === kind) goals.push({ x: c.x, z: c.z, r: Math.max(8, c.spread) });
     }
     ctx.lineWidth = 2;
     for (const goal of goals) {
@@ -455,7 +480,7 @@ export class Hud {
 }
 
 export function npcName(id: string) {
-  return NPCS.find((n) => n.id === id)?.name ?? id;
+  return ALL_NPCS.find((n) => n.id === id)?.name ?? id;
 }
 
 export function escapeHtml(s: string) {

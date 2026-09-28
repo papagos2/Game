@@ -102,10 +102,10 @@ try {
     await page.getByText('How to play').waitFor();
     await page.locator('#resume').click();
   });
-  await step('boss fight at max level', async () => {
+  await step('boss fight at level 10', async () => {
     await G(() => {
       const g = window.__game;
-      g.gainXp(99999);
+      while (g.progress.level < 10) g.gainXp(500);
       const boss = g.units.find((u) => u.kind === 'boss');
       g.player.pos.set(boss.pos.x, boss.pos.y, boss.pos.z + 14);
       g.cam.yaw = 0;
@@ -127,16 +127,58 @@ try {
     const alive = await G(() => !window.__game.player.dead && !window.__game.paused);
     if (!alive) throw new Error('did not respawn');
   });
+  await step('choose a path (Frostweaver) and spend talents', async () => {
+    const badge = await page.locator('#skillBadge').textContent();
+    if (badge !== '!') throw new Error('skills badge should ask to choose a path, got ' + badge);
+    await page.locator('#btnSkills').click();
+    await page.getByText('Choose your path').waitFor();
+    await shot('10-paths');
+    await page.locator('[data-spec="frostweaver"]').click();
+    await page.locator('#yes').click();
+    await page.getByText('Razor Ice').waitFor();
+    await page.locator('[data-node="fw_spike"]').click();
+    await page.locator('[data-tab="core"]').click();
+    await page.locator('[data-node="es_focus"]').click();
+    await shot('11-talents');
+    const st = await G(() => ({ spec: window.__game.progress.spec, t: window.__game.progress.talents }));
+    if (st.spec !== 'frostweaver' || st.t.fw_spike !== 1 || st.t.es_focus !== 1) throw new Error('talents not applied ' + JSON.stringify(st));
+    await page.locator('#x').click();
+    const cast = await G(() => {
+      const g = window.__game;
+      const w = g.units.find((u) => u.kind === 'brute' && !u.dead);
+      g.player.pos.set(w.pos.x + 15, w.pos.y, w.pos.z);
+      g.player.target = w;
+      return g.useAbility('glacialSpike');
+    });
+    if (!cast) throw new Error('could not cast the new spec ability');
+    const slots = await page.locator('#actionBar .ab-spec').count();
+    if (slots !== 2) throw new Error('expected 2 spec buttons, got ' + slots);
+  });
+  await step('travel to Frostmarch and the Sunscar Dunes', async () => {
+    for (const [map, shotName] of [['frostmarch', '12-frostmarch'], ['sunscar', '13-sunscar']]) {
+      await G((m) => {
+        const g = window.__game;
+        if (!g.progress.unlocked.includes(m)) g.progress.unlocked.push(m);
+        const w = g.npcs.find((n) => n.npc.travel);
+        g.player.pos.set(w.pos.x - 2, w.pos.y, w.pos.z - 2);
+        g.tryInteract();
+      }, map);
+      await page.locator(`[data-map="${map}"]`).click();
+      await page.waitForFunction((m) => window.__game && window.__game.map.id === m && !window.__game.paused, map);
+      await page.waitForTimeout(1500);
+      await shot(shotName);
+    }
+  });
   await step('save and continue', async () => {
     await G(() => window.__game.save());
     await page.reload();
     await page.getByText('Continue').waitFor();
     await page.getByText('Continue').click();
     await page.waitForFunction(() => window.__game && !window.__game.paused);
-    const lvl = await G(() => window.__game.progress.level);
-    if (lvl !== 10) throw new Error('save not restored, level ' + lvl);
+    const st = await G(() => ({ lvl: window.__game.progress.level, map: window.__game.map.id, spec: window.__game.progress.spec }));
+    if (st.lvl !== 10 || st.map !== 'sunscar' || st.spec !== 'frostweaver') throw new Error('save not restored ' + JSON.stringify(st));
     await page.waitForTimeout(800);
-    await shot('09-continued');
+    await shot('14-continued');
   });
   await step('frame rate sample', async () => {
     const fps = await page.evaluate(() => new Promise((r) => { let n = 0; const t0 = performance.now(); const f = () => { n++; if (performance.now() - t0 < 2000) requestAnimationFrame(f); else r(n / 2); }; requestAnimationFrame(f); }));

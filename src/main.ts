@@ -2,7 +2,8 @@ import './styles.css';
 import type { ClassId } from './data/classes';
 import { play, setSoundEnabled, unlockAudio } from './game/audio';
 import { Game, type Quality } from './game/game';
-import { acceptQuest, deleteSave, loadGame, newProgress, questsForNpc, saveGame, type Progress } from './game/progress';
+import { acceptQuest, deleteSave, loadGame, newProgress, questsForNpc, rankUp, saveGame, type Progress } from './game/progress';
+import { MAPS, type MapId } from './data/world';
 import { Hud } from './ui/hud';
 import { Input } from './ui/input';
 import { Panels, classSelect, closeScreens, loadSetting, titleScreen } from './ui/screens';
@@ -61,37 +62,60 @@ function startGame(progress: Progress) {
       pause();
       panels?.victory();
     },
+    actComplete: (map, unlocked) => {
+      pause();
+      panels?.actComplete(map, unlocked);
+    },
+    specReady: () => undefined,
   }, progress, input, defaultQuality());
-  panels = new Panels(game, resume, quitToTitle);
+  panels = new Panels(game, resume, quitToTitle, travel);
   hud = new Hud(game, {
     bag: () => { pause(); panels!.bag(); },
     quests: () => { pause(); panels!.questLog(); },
     menu: () => { pause(); panels!.menu(); },
+    skills: () => { pause(); panels!.skills(); },
     talk: () => game?.tryInteract(),
   });
   game.start();
   let last = performance.now();
   const tick = (t: number) => {
     hudRaf = requestAnimationFrame(tick);
-    const dt = Math.min(0.1, (t - last) / 1000);
+    const dt = Math.max(0, Math.min(0.1, (t - last) / 1000));
     last = t;
     hud?.update(dt);
   };
   hudRaf = requestAnimationFrame(tick);
   if (progress.completed.length === 0 && progress.active.length === 0 && progress.playSeconds < 1) {
-    hud.banner('Hearthmoor', 'Speak with Warden Elra - she is marked with !');
+    hud.banner('Hearthmoor', `Speak with ${MAPS.vale.npcs[0].name} - marked with !`);
   }
-  if (import.meta.env.DEV) Object.assign(window, { __game: game, __debug: { acceptQuest, questsForNpc } });
+  if (import.meta.env.DEV) Object.assign(window, { __game: game, __debug: { acceptQuest, questsForNpc, rankUp, travel } });
 }
 
-function quitToTitle() {
+function teardown() {
   cancelAnimationFrame(hudRaf);
   hud?.destroy();
   game?.dispose();
   game = null;
   hud = null;
   hudEl.hidden = true;
+}
+
+function quitToTitle() {
+  teardown();
   showTitle();
+}
+
+/** Moves the hero to another map (a fresh world is built). */
+function travel(map: MapId) {
+  if (!game || !game.progress.unlocked.includes(map)) return;
+  const p = game.progress;
+  game.save();
+  p.mapId = map;
+  p.pos = { ...MAPS[map].spawn };
+  saveGame(p);
+  teardown();
+  startGame(p);
+  hud?.banner(MAPS[map].name, `${MAPS[map].subtitle} - levels ${MAPS[map].levels[0]}-${MAPS[map].levels[1]}`);
 }
 
 function showTitle() {

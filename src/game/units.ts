@@ -34,6 +34,13 @@ export class Unit {
   moving = 0;
   stunUntil = 0;
   rootUntil = 0;
+  slowUntil = 0;
+  /** Damage reduction from Shield Wall / Barkskin (0..1) and thorns damage while it lasts. */
+  guard = 0;
+  guardUntil = 0;
+  reflect = 0;
+  frenzyUntil = 0;
+  enraged = false;
   shield = 0;
   shieldUntil = 0;
   dots: Dot[] = [];
@@ -83,6 +90,10 @@ export class Unit {
 
   stunned(now: number) {
     return now < this.stunUntil;
+  }
+
+  slowed(now: number) {
+    return now < this.slowUntil;
   }
 
   rooted(now: number) {

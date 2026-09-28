@@ -16,10 +16,14 @@ const PATHS: Record<Glyph, string> = {
   bloom: 'M50 50 m-8 0 a8 8 0 1 0 16 0 a8 8 0 1 0 -16 0 M50 42 C40 20 60 20 50 42 M58 50 C80 40 80 60 58 50 M50 58 C60 80 40 80 50 58 M42 50 C20 60 20 40 42 50',
   potion: 'M40 10 L60 10 L60 18 L56 18 L56 34 C72 40 80 52 78 66 C76 82 64 90 50 90 C36 90 24 82 22 66 C20 52 28 40 44 34 L44 18 L40 18 Z M28 62 L72 62',
   leap: 'M16 80 C30 40 60 24 84 20 M84 20 L66 18 M84 20 L78 36 M20 86 L40 86',
+  snow: 'M50 10 L50 90 M15 30 L85 70 M15 70 L85 30 M40 18 L50 28 L60 18 M40 82 L50 72 L60 82',
+  skull: 'M50 14 C28 14 18 30 20 48 C22 58 28 62 30 66 L30 80 L70 80 L70 66 C72 62 78 58 80 48 C82 30 72 14 50 14 Z M38 44 A7 7 0 1 0 38.1 44 Z M62 44 A7 7 0 1 0 62.1 44 Z',
+  rune: 'M50 8 L80 30 L80 70 L50 92 L20 70 L20 30 Z M50 25 L50 75 M35 40 L65 60 M65 40 L35 60',
+  claw: 'M25 20 C45 40 45 65 30 85 M45 15 C65 40 65 65 50 88 M65 20 C85 40 85 65 70 85',
 };
 
 export function glyphSvg(g: Glyph, stroke = '#fff'): string {
-  const filled = ['bolt', 'flame', 'wing', 'shield', 'storm', 'leaf', 'paw', 'potion'].includes(g);
+  const filled = ['bolt', 'flame', 'wing', 'shield', 'storm', 'leaf', 'paw', 'potion', 'skull'].includes(g);
   return `<svg viewBox="0 0 100 100" aria-hidden="true"><path d="${PATHS[g]}" fill="${filled ? 'rgba(255,255,255,0.92)' : 'none'}" stroke="${stroke}" stroke-width="${filled ? 3 : 7}" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 }
 
