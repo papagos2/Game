@@ -50,6 +50,7 @@ class Telemetry
 public:
 	// Seconds without player-involved combat that count as a lull (after the first fight).
 	float LullThreshold = 75.f;
+	float SaveCheckInterval = 120.f; // game seconds between suspend/resume round trips
 	// A unit trying to walk that stays within StuckRadius for StuckSeconds is stuck.
 	float StuckRadius = 0.75f;
 	float StuckSeconds = 8.f;
@@ -90,6 +91,7 @@ public:
 	// Health.
 	std::vector<StuckIncident> Stuck;
 	std::vector<std::string> Violations;
+	int SaveChecks = 0; // suspend saves written, restored and compared
 	int PeakPlayerUnits = 0;
 	int PeakEnemyUnits = 0;
 	int PeakEntities = 0;
@@ -116,12 +118,14 @@ private:
 	};
 	void Sample(const bh::Session& S, float Dt);
 	void CheckInvariants(const bh::Session& S);
+	void CheckSaveRoundTrip(const bh::Session& S);
 	void Violation(const std::string& Text);
 
 	std::map<bh::EntityId, bh::Archetype> TypeOf;
 	std::map<bh::EntityId, Tracker> Trackers;
 	float NextSample = 0.f;
 	float LastSampleTime = 0.f;
+	float NextSaveCheck = 0.f;
 	float LastCombat = -1.f;
 	float LastCombatSecond = -1.f;
 	int PrevRes[bh::NumResources] = {};

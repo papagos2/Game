@@ -5,6 +5,8 @@
 #include "Game/BhCommon.h"
 #include "Game/BhSaveGame.h"
 
+#include "BhSerialize.h"
+
 #include "Kismet/GameplayStatics.h"
 #include "Misc/CoreDelegates.h"
 
@@ -24,8 +26,19 @@ void UBhGameInstance::Init()
 	{
 		if (const UBhSuspendSave* Saved = Cast<UBhSuspendSave>(UGameplayStatics::LoadGameFromSlot(SuspendSlot, SaveUser)))
 		{
-			bHasSuspended = Saved->Data.Num() > 0;
-			SuspendedSummary = Saved->Summary;
+			// Offer "Continue" only for a mission that can be restored: a save cut short by the
+			// app being killed mid-write, or left by an older version, is dropped here.
+			std::string Error;
+			if (bh::IsSaveIntact(Saved->Data.GetData(), static_cast<size_t>(Saved->Data.Num()), Error))
+			{
+				bHasSuspended = true;
+				SuspendedSummary = Saved->Summary;
+			}
+			else
+			{
+				UE_LOG(LogBeaconhold, Warning, TEXT("Beaconhold: dropping the suspended mission: %s"), *BhUE::ToFString(Error));
+				UGameplayStatics::DeleteGameInSlot(SuspendSlot, SaveUser);
+			}
 		}
 	}
 	DeactivateHandle = FCoreDelegates::ApplicationWillDeactivateDelegate.AddUObject(this, &UBhGameInstance::HandleAppDeactivate);

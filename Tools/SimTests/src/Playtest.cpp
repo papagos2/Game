@@ -2,6 +2,7 @@
 #include "Playtest.h"
 
 #include "BhHud.h"
+#include "BhSerialize.h"
 
 #include <cmath>
 #include <cstdio>
@@ -46,6 +47,7 @@ void Telemetry::Begin(const Session& S)
 	}
 	NextSample = W.GetTime();
 	LastSampleTime = W.GetTime();
+	NextSaveCheck = W.GetTime() + SaveCheckInterval;
 }
 
 void Telemetry::OnTick(const Session& S, const std::vector<GameEvent>& Events)
@@ -278,6 +280,29 @@ void Telemetry::Sample(const Session& S, float Dt)
 	PeakEntities = MaxI(PeakEntities, Alive);
 	PeakProjectiles = MaxI(PeakProjectiles, static_cast<int>(W.GetProjectiles().size()));
 	CheckInvariants(S);
+	if (Now >= NextSaveCheck && S.GetMission().Outcome == MissionOutcome::InProgress)
+	{
+		NextSaveCheck = Now + SaveCheckInterval;
+		CheckSaveRoundTrip(S);
+	}
+}
+
+void Telemetry::CheckSaveRoundTrip(const Session& S)
+{
+	// The app can be suspended at any moment: the save must load and hold the very same world.
+	std::vector<uint8_t> Bytes;
+	SaveSession(S, Bytes);
+	Session Copy;
+	std::string Err;
+	++SaveChecks;
+	if (!LoadSession(Copy, Bytes, Err))
+	{
+		Violation("suspend save at " + FormatTime(S.GetWorld().GetTime()) + " does not load: " + Err);
+	}
+	else if (HashWorld(Copy.GetWorld()) != HashWorld(S.GetWorld()))
+	{
+		Violation("suspend save at " + FormatTime(S.GetWorld().GetTime()) + " restores a different world");
+	}
 }
 
 void Telemetry::Violation(const std::string& Text)
@@ -440,8 +465,9 @@ std::string Telemetry::Summary() const
 			T.DamageDealt, T.DamageTaken);
 		Out += Buf;
 	}
-	std::snprintf(Buf, sizeof(Buf), "    health: stuck %zu, invariant violations %zu | peaks: units %d vs %d, entities %d, projectiles %d, events/tick %d\n",
-		Stuck.size(), Violations.size(), PeakPlayerUnits, PeakEnemyUnits, PeakEntities, PeakProjectiles, PeakEventsPerTick);
+	std::snprintf(Buf, sizeof(Buf),
+		"    health: stuck %zu, invariant violations %zu, save round trips %d | peaks: units %d vs %d, entities %d, projectiles %d, events/tick %d\n", Stuck.size(),
+		Violations.size(), SaveChecks, PeakPlayerUnits, PeakEnemyUnits, PeakEntities, PeakProjectiles, PeakEventsPerTick);
 	Out += Buf;
 	for (size_t I = 0; I < Stuck.size() && I < 6; ++I)
 	{

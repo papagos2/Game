@@ -4,6 +4,8 @@
 // reading, so the two can never drift apart. All targets are little-endian.
 #include "BhSerialize.h"
 
+#include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <type_traits>
 
@@ -12,9 +14,21 @@ namespace bh
 namespace
 {
 constexpr uint32_t SaveMagic = 0x31534842u; // "BHS1"
+constexpr uint32_t MaxSavedVector = 200000u;
 
 template <typename Ar>
 void SaveVisitEntity(Ar& A, Entity& E);
+
+uint64_t Checksum(const uint8_t* Data, size_t Size)
+{
+	uint64_t H = 1469598103934665603ull; // FNV-1a
+	for (size_t I = 0; I < Size; ++I)
+	{
+		H ^= Data[I];
+		H *= 1099511628211ull;
+	}
+	return H;
+}
 
 class SaveWriter
 {
@@ -34,8 +48,13 @@ public:
 	{
 		Pod(V);
 	}
+	void operator()(bool& V)
+	{
+		const uint8_t Raw = V ? 1 : 0;
+		Pod(Raw);
+	}
 	template <typename T>
-	void operator()(std::vector<T>& V)
+	void Array(std::vector<T>& V, uint32_t /*MaxCount*/)
 	{
 		uint32_t N = static_cast<uint32_t>(V.size());
 		Pod(N);
@@ -43,6 +62,11 @@ public:
 		{
 			(*this)(Item);
 		}
+	}
+	template <typename T>
+	void operator()(std::vector<T>& V)
+	{
+		Array(V, MaxSavedVector);
 	}
 	void operator()(std::string& V)
 	{
@@ -84,22 +108,36 @@ public:
 	{
 		Pod(V);
 	}
+	void operator()(bool& V)
+	{
+		uint8_t Raw = 0;
+		Pod(Raw);
+		bError = bError || Raw > 1;
+		V = Raw == 1;
+	}
 	template <typename T>
-	void operator()(std::vector<T>& V)
+	void Array(std::vector<T>& V, uint32_t MaxCount)
 	{
 		uint32_t N = 0;
 		Pod(N);
-		if (bError || N > 200000u)
+		// Each element takes at least a byte (a plain struct its full size), so a damaged count
+		// can never make us allocate more than the save itself could hold.
+		const size_t MinBytes = std::is_trivially_copyable<T>::value ? sizeof(T) : 1;
+		if (bError || N > MaxCount || static_cast<size_t>(N) * MinBytes > Buf.size() - Pos)
 		{
 			bError = true;
 			return;
 		}
-		V.clear();
-		V.resize(N);
+		V = std::vector<T>(N);
 		for (T& Item : V)
 		{
 			(*this)(Item);
 		}
+	}
+	template <typename T>
+	void operator()(std::vector<T>& V)
+	{
+		Array(V, MaxSavedVector);
 	}
 	void operator()(std::string& V)
 	{
@@ -121,6 +159,7 @@ public:
 		V = N;
 	}
 	bool Failed() const { return bError; }
+	bool AtEnd() const { return Pos == Buf.size(); }
 
 private:
 	const std::vector<uint8_t>& Buf;
@@ -182,7 +221,7 @@ void SaveVisitEntity(Ar& A, Entity& E)
 	A(E.bConstructed);
 	A(E.BuildProgress);
 	A(E.Builders);
-	A(E.Queue);
+	A.Array(E.Queue, static_cast<uint32_t>(MaxQueueLength));
 	A(E.bHasRally);
 	A(E.RallyPoint);
 	A(E.RallyNode);
@@ -229,8 +268,7 @@ struct SaveBlob
 	float KeepMinRatio = 1.f;
 	bool Stars[3] = {false, false, false};
 	std::string EndReason;
-	// AI
-	AIConfig AICfg;
+	// AI (its configuration is the mission's, never changed in play, so it is not saved)
 	Difficulty AIDiff = Difficulty::Normal;
 	float GloomAccum = 0.f;
 	float ThinkTimer = 0.f;
@@ -260,7 +298,7 @@ void SaveVisitBlob(Ar& A, SaveBlob& B)
 	{
 		A(Points);
 	}
-	A(B.Entities);
+	A.Array(B.Entities, static_cast<uint32_t>(World::MaxEntities));
 	A(B.Projectiles);
 	for (TeamState& T : B.Teams)
 	{
@@ -290,7 +328,6 @@ void SaveVisitBlob(Ar& A, SaveBlob& B)
 		A(Star);
 	}
 	A(B.EndReason);
-	A(B.AICfg);
 	A(B.AIDiff);
 	A(B.GloomAccum);
 	A(B.ThinkTimer);
@@ -305,6 +342,258 @@ void SaveVisitBlob(Ar& A, SaveBlob& B)
 	A(B.Focus);
 	A(B.Distance);
 	A(B.Accumulator);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Validation: everything a loaded save feeds into array indices, loops, allocations, positions
+// and arithmetic is checked before any of it reaches the game. Mere implausibility (hit points
+// above the maximum and the like) is left alone: it cannot crash anything.
+// ---------------------------------------------------------------------------------------------
+
+// A bool inside a struct read as raw bytes: look at the byte, never at the (maybe invalid) bool.
+bool BoolByte(const bool& V)
+{
+	uint8_t Raw = 0;
+	std::memcpy(&Raw, &V, 1);
+	return Raw <= 1;
+}
+
+bool Finite(float V)
+{
+	return std::isfinite(V);
+}
+
+bool InRange(float V, float Lo, float Hi)
+{
+	return std::isfinite(V) && V >= Lo && V <= Hi;
+}
+
+bool InRange(int V, int Lo, int Hi)
+{
+	return V >= Lo && V <= Hi;
+}
+
+struct SaveCheck
+{
+	float MapW = 0.f;
+	float MapH = 0.f;
+	int TilesW = 0;
+	int TilesH = 0;
+
+	bool OnMap(const Vec2& P) const { return InRange(P.X, 0.f, MapW) && InRange(P.Y, 0.f, MapH); }
+	bool OnMap(const Tile& T) const { return InRange(T.X, 0, TilesW - 1) && InRange(T.Y, 0, TilesH - 1); }
+	bool OnMap(const TileRect& R) const { return R.X0 >= 0 && R.Y0 >= 0 && R.X0 < R.X1 && R.Y0 < R.Y1 && R.X1 <= TilesW && R.Y1 <= TilesH; }
+};
+
+bool ValidTeam(Team T)
+{
+	return static_cast<int>(T) < NumTeams;
+}
+
+bool ValidArchetype(Archetype A)
+{
+	return A < Archetype::Count;
+}
+
+bool ValidResource(Resource R)
+{
+	return R == Resource::Sunstone || R == Resource::Timber || R == Resource::None;
+}
+
+bool ValidDifficulty(Difficulty D)
+{
+	return D == Difficulty::Easy || D == Difficulty::Normal || D == Difficulty::Hard;
+}
+
+const char* CheckEntity(const Entity& E, const SaveCheck& C, uint32_t NextId)
+{
+	if (E.Id == NoEntity || E.Id >= NextId || !ValidArchetype(E.Type) || E.Kind != GetDef(E.Type).Kind || !ValidTeam(E.Owner))
+	{
+		return "entity identity";
+	}
+	if (E.Order > OrderType::Build || !ValidResource(E.CarryType) || !ValidResource(E.GatherType) || E.Buff > BuffType::Charge ||
+		E.Act > Activity::Carrying)
+	{
+		return "entity state";
+	}
+	const float Timers[] = {E.Facing, E.EngageTimer, E.RepathTimer, E.StuckTimer, E.BestWaypointDist, E.AttackCooldown, E.WindupTimer, E.ScanTimer,
+		E.LastDamagedTime, E.GatherTimer, E.GatherFxTimer, E.AbilityCooldown, E.BuffTimer, E.HealTimer, E.IncomeAccum, E.SpawnTime};
+	for (float T : Timers)
+	{
+		if (!Finite(T))
+		{
+			return "entity timer";
+		}
+	}
+	if (!InRange(E.Radius, 0.f, 4.f) || !InRange(E.MaxHp, 0.001f, 1e6f) || !InRange(E.Hp, -1e6f, 1e6f) || !InRange(E.BuildProgress, 0.f, 1.f))
+	{
+		return "entity health";
+	}
+	if (!C.OnMap(E.Pos) || !C.OnMap(E.PrevPos) || !C.OnMap(E.OrderPoint) || !C.OnMap(E.LeashPoint) || !C.OnMap(E.PathGoal) || !C.OnMap(E.RallyPoint) ||
+		!C.OnMap(E.GatherTile) || !C.OnMap(E.RallyTree) || (!E.IsUnit() && !C.OnMap(E.Rect)))
+	{
+		return "entity position";
+	}
+	if (E.PathIndex > E.Path.size() || E.Path.size() > static_cast<size_t>(C.TilesW * C.TilesH))
+	{
+		return "entity path";
+	}
+	for (const Vec2& P : E.Path)
+	{
+		if (!C.OnMap(P))
+		{
+			return "entity path";
+		}
+	}
+	if (!InRange(E.CarryAmount, 0, 1000) || !InRange(E.Amount, 0, 1000000) || !InRange(E.Kills, 0, 1000000) || !InRange(E.Builders, 0, 1000) ||
+		!InRange(E.Miners, 0, 1000))
+	{
+		return "entity counters";
+	}
+	for (const ProductionItem& Item : E.Queue)
+	{
+		if (!BoolByte(Item.bResearch) || (Item.bResearch ? Item.Tech >= Research::Count : !ValidArchetype(Item.Unit)) || !InRange(Item.Total, 0.001f, 1e5f) ||
+			!InRange(Item.Elapsed, 0.f, 1e5f) || !InRange(Item.PaidSunstone, 0, 100000) || !InRange(Item.PaidTimber, 0, 100000))
+		{
+			return "production queue";
+		}
+	}
+	return nullptr;
+}
+
+const char* CheckBlob(const SaveBlob& B)
+{
+	// Session and map.
+	if (B.MissionIndex < 0 || B.MissionIndex >= GetMissionCount() || B.Config.MissionIndex != B.MissionIndex)
+	{
+		return "unknown mission";
+	}
+	if (!ValidDifficulty(B.Config.Diff) || !ValidDifficulty(B.Diff) || !ValidDifficulty(B.AIDiff) || !BoolByte(B.Config.bTutorial))
+	{
+		return "settings";
+	}
+	for (int Rank : B.Config.BoonRanks)
+	{
+		if (!InRange(Rank, 0, MaxBoonRank))
+		{
+			return "settings";
+		}
+	}
+	if (!InRange(B.MapW, 1, 1024) || !InRange(B.MapH, 1, 1024) || B.Tiles.size() != static_cast<size_t>(B.MapW) * static_cast<size_t>(B.MapH) ||
+		B.BeaconSites.size() > 127u)
+	{
+		return "map size";
+	}
+	SaveCheck C;
+	C.MapW = static_cast<float>(B.MapW);
+	C.MapH = static_cast<float>(B.MapH);
+	C.TilesW = B.MapW;
+	C.TilesH = B.MapH;
+	for (const MapTile& T : B.Tiles)
+	{
+		if (T.G >= Ground::Count || T.Tree > TreeKind::Dead || T.BeaconSite < -1 || T.BeaconSite >= static_cast<int>(B.BeaconSites.size()))
+		{
+			return "map tile";
+		}
+	}
+	for (const TileRect& Site : B.BeaconSites)
+	{
+		if (!C.OnMap(Site))
+		{
+			return "beacon site";
+		}
+	}
+	for (const std::vector<Tile>& Points : B.SpawnPoints)
+	{
+		for (const Tile& P : Points)
+		{
+			if (!C.OnMap(P))
+			{
+				return "spawn point";
+			}
+		}
+	}
+
+	// World.
+	if (!InRange(B.Time, 0.f, 1e6f) || B.NextId == NoEntity || B.NextId > 0x7FFFFFFFu)
+	{
+		return "world clock";
+	}
+	std::vector<EntityId> Ids;
+	Ids.reserve(B.Entities.size());
+	for (const Entity& E : B.Entities)
+	{
+		if (const char* Bad = CheckEntity(E, C, B.NextId))
+		{
+			return Bad;
+		}
+		Ids.push_back(E.Id);
+	}
+	std::sort(Ids.begin(), Ids.end());
+	if (std::adjacent_find(Ids.begin(), Ids.end()) != Ids.end())
+	{
+		return "duplicate entity";
+	}
+	for (const Projectile& P : B.Projectiles)
+	{
+		if (!BoolByte(P.bAlive) || !ValidTeam(P.Owner) || !(ValidArchetype(P.SourceType) || P.SourceType == Archetype::None) || !C.OnMap(P.Pos) ||
+			!C.OnMap(P.PrevPos) || !C.OnMap(P.Start) || !C.OnMap(P.TargetPos) || !InRange(P.Speed, 0.01f, 1000.f) || !InRange(P.Damage, 0.f, 1e6f) ||
+			!InRange(P.Splash, 0.f, 100.f) || !InRange(P.BuildingMult, 0.f, 100.f) || !InRange(P.Travelled, 0.f, 1e4f) || !InRange(P.TotalDist, 0.f, 1e4f))
+		{
+			return "projectile";
+		}
+	}
+	for (const TeamState& T : B.Teams)
+	{
+		bool bFlags = BoolByte(T.bIgnoreSupply);
+		for (const bool& R : T.Researched)
+		{
+			bFlags = bFlags && BoolByte(R);
+		}
+		const TeamStats& St = T.Stats;
+		if (!bFlags || !InRange(T.Res[0], 0, 10000000) || !InRange(T.Res[1], 0, 10000000) || !InRange(T.SupplyUsed, 0, 100000) ||
+			!InRange(T.SupplyCap, 0, 100000) || !InRange(T.HpMult, 0.01f, 100.f) || !InRange(T.DamageMult, 0.01f, 100.f) ||
+			!InRange(T.GatherMult, 0.01f, 100.f) || !InRange(T.BuildTimeMult, 0.01f, 100.f) || !InRange(T.BuildingHpMult, 0.01f, 100.f) ||
+			!Finite(T.LastAlertTime) || !InRange(St.UnitsTrained, 0, 10000000) || !InRange(St.UnitsLost, 0, 10000000) || !InRange(St.Kills, 0, 10000000) ||
+			!InRange(St.BuildingsBuilt, 0, 10000000) || !InRange(St.BuildingsLost, 0, 10000000) || !InRange(St.Gathered[0], 0, 1000000000) ||
+			!InRange(St.Gathered[1], 0, 1000000000))
+		{
+			return "team";
+		}
+	}
+
+	// Mission, enemy commander, camera.
+	const MissionDef& Def = GetMission(B.MissionIndex);
+	if (B.Outcome > MissionOutcome::Lost || !InRange(B.Elapsed, 0.f, 1e6f) || B.NextWave > Def.Waves.size() ||
+		!InRange(B.TutorialIndex, 0, static_cast<int>(Def.Tutorial.size())) || !Finite(B.TutorialStepTime) || !Finite(B.RetargetTimer) ||
+		!Finite(B.KeepMinRatio))
+	{
+		return "mission state";
+	}
+	for (const ObjectiveState& O : B.Objectives)
+	{
+		if (!BoolByte(O.bDone))
+		{
+			return "objective";
+		}
+	}
+	if (!Finite(B.GloomAccum) || !Finite(B.ThinkTimer) || !Finite(B.NextAttack) || !Finite(B.LastDefenseTime) || !InRange(B.WaveSize, 0, 1000) ||
+		!InRange(B.WavesLaunched, 0, 1000000) || !C.OnMap(B.Home) || !C.OnMap(B.Rally))
+	{
+		return "enemy commander";
+	}
+	for (const AIPendingPick& P : B.AIPending)
+	{
+		if (!ValidArchetype(P.Unit) || !Finite(P.Since))
+		{
+			return "enemy commander";
+		}
+	}
+	if (!Finite(B.Focus.X) || !Finite(B.Focus.Y) || !Finite(B.Distance) || !Finite(B.Accumulator))
+	{
+		return "camera";
+	}
+	return nullptr;
 }
 } // namespace
 
@@ -354,7 +643,6 @@ void SaveSession(const Session& S, std::vector<uint8_t>& OutBytes)
 		B.Stars[I] = M.Stars[I];
 	}
 	B.EndReason = M.EndReason;
-	B.AICfg = AI.Config;
 	B.AIDiff = AI.Diff;
 	B.GloomAccum = AI.GloomAccum;
 	B.ThinkTimer = AI.ThinkTimer;
@@ -374,19 +662,37 @@ void SaveSession(const Session& S, std::vector<uint8_t>& OutBytes)
 	SaveWriter Writer(OutBytes);
 	uint32_t Magic = SaveMagic;
 	uint32_t Version = SessionSaveVersion;
+	uint64_t Sum = 0;
 	Writer(Magic);
 	Writer(Version);
+	Writer(Sum); // filled in below
 	SaveVisitBlob(Writer, B);
+	ResealSave(OutBytes);
 }
 
-bool LoadSession(Session& S, const std::vector<uint8_t>& Bytes, std::string& OutError)
+void ResealSave(std::vector<uint8_t>& Bytes)
 {
-	SaveReader Reader(Bytes);
+	if (Bytes.size() >= SaveHeaderBytes)
+	{
+		const uint64_t Sum = Checksum(Bytes.data() + SaveHeaderBytes, Bytes.size() - SaveHeaderBytes);
+		std::memcpy(Bytes.data() + 8, &Sum, sizeof(Sum));
+	}
+}
+
+bool IsSaveIntact(const uint8_t* Data, size_t Size, std::string& OutError)
+{
 	uint32_t Magic = 0;
 	uint32_t Version = 0;
-	Reader(Magic);
-	Reader(Version);
-	if (Reader.Failed() || Magic != SaveMagic)
+	uint64_t Sum = 0;
+	if (Data == nullptr || Size < SaveHeaderBytes)
+	{
+		OutError = "not a Beaconhold save";
+		return false;
+	}
+	std::memcpy(&Magic, Data, sizeof(Magic));
+	std::memcpy(&Version, Data + 4, sizeof(Version));
+	std::memcpy(&Sum, Data + 8, sizeof(Sum));
+	if (Magic != SaveMagic)
 	{
 		OutError = "not a Beaconhold save";
 		return false;
@@ -396,29 +702,37 @@ bool LoadSession(Session& S, const std::vector<uint8_t>& Bytes, std::string& Out
 		OutError = "save from a different game version";
 		return false;
 	}
+	if (Sum != Checksum(Data + SaveHeaderBytes, Size - SaveHeaderBytes))
+	{
+		OutError = "save data is damaged";
+		return false;
+	}
+	return true;
+}
+
+bool LoadSession(Session& S, const std::vector<uint8_t>& Bytes, std::string& OutError)
+{
+	if (!IsSaveIntact(Bytes.data(), Bytes.size(), OutError))
+	{
+		return false;
+	}
+	SaveReader Reader(Bytes);
+	uint32_t Magic = 0;
+	uint32_t Version = 0;
+	uint64_t Sum = 0;
+	Reader(Magic);
+	Reader(Version);
+	Reader(Sum);
 	SaveBlob B;
 	SaveVisitBlob(Reader, B);
-	if (Reader.Failed())
+	if (Reader.Failed() || !Reader.AtEnd())
 	{
-		OutError = "save data is truncated";
+		OutError = "save data is malformed";
 		return false;
 	}
-	if (B.MissionIndex < 0 || B.MissionIndex >= GetMissionCount() || B.Config.MissionIndex != B.MissionIndex)
+	if (const char* Bad = CheckBlob(B))
 	{
-		OutError = "unknown mission in save";
-		return false;
-	}
-	for (const Entity& E : B.Entities)
-	{
-		if (E.Type == Archetype::None || E.Type >= Archetype::Count || static_cast<int>(E.Owner) >= NumTeams)
-		{
-			OutError = "corrupt entity in save";
-			return false;
-		}
-	}
-	if (static_cast<int>(B.Entities.size()) > World::MaxEntities)
-	{
-		OutError = "too many entities in save";
+		OutError = std::string("invalid ") + Bad + " in save";
 		return false;
 	}
 
@@ -470,7 +784,7 @@ bool LoadSession(Session& S, const std::vector<uint8_t>& Bytes, std::string& Out
 	M.Objectives.resize(M.Def().Objectives.size());
 
 	EnemyAI& AI = S.GetAI();
-	AI.Config = B.AICfg;
+	AI.Config = M.Def().AI;
 	AI.Diff = B.AIDiff;
 	AI.GloomAccum = B.GloomAccum;
 	AI.ThinkTimer = B.ThinkTimer;
@@ -485,6 +799,7 @@ bool LoadSession(Session& S, const std::vector<uint8_t>& Bytes, std::string& Out
 
 	S.GetCamera().Init(B.MapW, B.MapH, B.Focus);
 	S.GetCamera().Distance = S.GetCamera().TargetDistance = B.Distance;
+	S.GetCamera().Clamp();
 	S.GetControl().Reset();
 	S.GetGestures().Reset();
 	S.RestoreConfig(B.Config);
