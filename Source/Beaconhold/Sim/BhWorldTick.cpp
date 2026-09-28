@@ -432,48 +432,48 @@ bool World::EngageWith(Entity& E, EntityId TargetId, float Dt)
 	{
 		return false;
 	}
+	// Kept from the target for a moment (a crowd around it, a wall): strike an enemy already in
+	// reach rather than stand in the fight. The order and its target stay the same.
+	if (E.EngageTimer > 1.f && E.AttackCooldown <= 0.f)
+	{
+		const EntityId Near = FindEnemyInReach(E);
+		if (Near != NoEntity)
+		{
+			const Entity* N = Find(Near);
+			StopMoving(E);
+			FaceTowards(E, N->IsUnit() ? N->Pos : N->Rect.ClosestPoint(E.Pos), Dt);
+			E.Act = Activity::Attacking;
+			E.WindupTimer = MaxF(D.Windup, 0.01f);
+			E.WindupTarget = Near;
+			E.AttackCooldown = GetCooldown(E);
+			++E.AttackSerial;
+			GameEvent Ev;
+			Ev.Type = EventType::AttackStarted;
+			Ev.A = E.Id;
+			Ev.B = Near;
+			Ev.Arch = E.Type;
+			Ev.Owner = E.Owner;
+			Ev.Pos = E.Pos;
+			Emit(Ev);
+			return true;
+		}
+	}
 
 	// Close in directly when near; otherwise path.
 	const Vec2 Aim = T->IsUnit() ? T->Pos : T->Rect.ClosestPoint(E.Pos);
 	const float CenterDist = Vec2::Dist(E.Pos, Aim);
-	if (CenterDist < 2.2f)
+	if (CenterDist < 2.2f && StepTowards(E, Aim, Dt))
 	{
-		const Vec2 Dir = (Aim - E.Pos).Normalized();
-		const Vec2 Next = E.Pos + Dir * (GetSpeed(E) * Dt);
-		bool bMoved = false;
-		if (Map.IsWalkablePos(Next))
-		{
-			E.Pos = Next;
-			bMoved = true;
-		}
-		else
-		{
-			const Vec2 SlideX(Next.X, E.Pos.Y);
-			const Vec2 SlideY(E.Pos.X, Next.Y);
-			if (Map.IsWalkablePos(SlideX) && AbsF(Dir.X) > 0.2f)
-			{
-				E.Pos = SlideX;
-				bMoved = true;
-			}
-			else if (Map.IsWalkablePos(SlideY) && AbsF(Dir.Y) > 0.2f)
-			{
-				E.Pos = SlideY;
-				bMoved = true;
-			}
-		}
-		if (bMoved)
-		{
-			StopMoving(E);
-			FaceTowards(E, Aim, Dt);
-			E.Act = Activity::Walking;
-			return true;
-		}
+		return true;
 	}
 
 	const bool bNeedPath = !E.bHasPath || (E.RepathTimer <= 0.f && Vec2::Dist(E.PathGoal, T->Pos) > 1.5f);
 	if (bNeedPath)
 	{
-		const int Expand = 1 + static_cast<int>(Range);
+		// The goal is the square of tiles around the target. Every tile of it must be within
+		// range, or a shooter on its far corner would stop out of range: a square fits inside
+		// the range circle when its half-diagonal does.
+		const int Expand = MaxI(1, static_cast<int>(Range * 0.7071f - 0.5f));
 		bool bPlanned = false;
 		if (T->IsUnit())
 		{
@@ -487,6 +487,12 @@ bool World::EngageWith(Entity& E, EntityId TargetId, float Dt)
 		if (bPlanned)
 		{
 			E.RepathTimer = 0.5f;
+			if (!E.bHasPath)
+			{
+				// Already on the goal (or nothing better): walk straight at the target.
+				StepTowards(E, Aim, Dt);
+				return true;
+			}
 		}
 	}
 	if (E.bHasPath && FollowPath(E, Dt))
@@ -494,6 +500,40 @@ bool World::EngageWith(Entity& E, EntityId TargetId, float Dt)
 		E.bHasPath = false;
 	}
 	return true;
+}
+
+bool World::StepTowards(Entity& E, const Vec2& Aim, float Dt)
+{
+	const Vec2 Dir = (Aim - E.Pos).Normalized();
+	const Vec2 Next = E.Pos + Dir * (GetSpeed(E) * Dt);
+	bool bMoved = false;
+	if (Map.IsWalkablePos(Next))
+	{
+		E.Pos = Next;
+		bMoved = true;
+	}
+	else
+	{
+		const Vec2 SlideX(Next.X, E.Pos.Y);
+		const Vec2 SlideY(E.Pos.X, Next.Y);
+		if (Map.IsWalkablePos(SlideX) && AbsF(Dir.X) > 0.2f)
+		{
+			E.Pos = SlideX;
+			bMoved = true;
+		}
+		else if (Map.IsWalkablePos(SlideY) && AbsF(Dir.Y) > 0.2f)
+		{
+			E.Pos = SlideY;
+			bMoved = true;
+		}
+	}
+	if (bMoved)
+	{
+		StopMoving(E);
+		FaceTowards(E, Aim, Dt);
+		E.Act = Activity::Walking;
+	}
+	return bMoved;
 }
 
 void World::ResolveStrike(Entity& E)
@@ -553,6 +593,38 @@ void World::ResolveStrike(Entity& E)
 			}
 		}
 	}
+}
+
+EntityId World::FindEnemyInReach(const Entity& E) const
+{
+	const float Range = GetRange(E);
+	// Melee reaches differ a little between units; a soldier can always answer an enemy that is
+	// close enough to strike it.
+	const float Reach = Range < 1.f ? Range + 0.3f : Range + 0.05f;
+	std::vector<EntityId> Near;
+	QueryRadius(E.Pos, Reach + E.Radius + 2.5f, Near);
+	EntityId Best = NoEntity;
+	float BestScore = 1e9f;
+	for (EntityId Id : Near)
+	{
+		const Entity* T = Find(Id);
+		if (T == nullptr || !T->bAlive || !AreEnemies(E.Owner, T->Owner) || T->IsResourceNode())
+		{
+			continue;
+		}
+		const float Dist = EdgeDistance(E, *T);
+		if (Dist > Reach)
+		{
+			continue;
+		}
+		const float Score = Dist + (T->IsBuilding() ? 5.f : 0.f); // soldiers before walls
+		if (Score < BestScore)
+		{
+			BestScore = Score;
+			Best = Id;
+		}
+	}
+	return Best;
 }
 
 EntityId World::ScanForTarget(const Entity& E, float Radius) const
@@ -1381,7 +1453,15 @@ void World::ResolveSeparation()
 			const float WA = Weight(A);
 			const float WB = Weight(*B);
 			const float Overlap = (MinDist - Dist) * 0.5f;
-			const Vec2 N = Delta / Dist;
+			Vec2 N = Delta / Dist;
+			// Two walkers heading into each other would shove each other to a standstill on the
+			// same line: tilt the push so both step to their right and pass.
+			const bool bWalkA = A.Act == Activity::Walking || A.Act == Activity::Carrying;
+			const bool bWalkB = B->Act == Activity::Walking || B->Act == Activity::Carrying;
+			if (bWalkA && bWalkB && Vec2::Dot(Vec2::FromAngle(A.Facing), N) < -0.3f && Vec2::Dot(Vec2::FromAngle(B->Facing), N) > 0.3f)
+			{
+				N = (N + Vec2(-N.Y, N.X) * 0.8f).Normalized();
+			}
 			const Vec2 NewA = A.Pos + N * (Overlap * WA / (WA + WB) * 2.f * 0.5f);
 			const Vec2 NewB = B->Pos - N * (Overlap * WB / (WA + WB) * 2.f * 0.5f);
 			if (Map.IsWalkablePos(NewA))

@@ -224,6 +224,8 @@ std::array<ArchetypeDef, NumArchetypes> BuildArchetypeTable()
 		D.BuildTime = 90.f;
 		D.IsDropOff = true;
 		D.Trains[0] = Archetype::Lamplighter;
+		// A slow tithe, so a vale mined bare can never leave the Wardens unable to act.
+		D.IncomePerSecond = 0.2f;
 	}
 	{
 		ArchetypeDef& D = T[ArchIndex(Archetype::Cottage)];
@@ -354,7 +356,7 @@ std::array<ArchetypeDef, NumArchetypes> BuildArchetypeTable()
 	{
 		ArchetypeDef& D = T[ArchIndex(Archetype::Beacon)];
 		D.Name = "Beacon";
-		D.Description = "Relight an ancient Beacon site. Heals nearby allies and yields Sunstone.";
+		D.Description = "Relight an ancient Beacon site with Timber. Heals nearby allies and yields Sunstone.";
 		D.Kind = EntityKind::Building;
 		D.Faction = Team::Player;
 		D.IconId = Icon::Beacon;
@@ -362,8 +364,9 @@ std::array<ArchetypeDef, NumArchetypes> BuildArchetypeTable()
 		D.Armor = 3.f;
 		D.Footprint = 2;
 		D.Sight = 7.f;
-		D.CostSunstone = 60;
-		D.CostTimber = 140;
+		// Timber only: an objective must stay reachable after the Sunstone runs out.
+		D.CostSunstone = 0;
+		D.CostTimber = 160;
 		D.BuildTime = 30.f;
 		D.NeedsBeaconSite = true;
 		D.Buildable = true;

@@ -379,6 +379,7 @@ private:
 	void ResolveStrike(Entity& E);
 	void TryHeal(Entity& E);
 	EntityId ScanForTarget(const Entity& E, float Radius) const;
+	EntityId FindEnemyInReach(const Entity& E) const; // closest enemy within attack range
 	void AssistAllies(const Entity& Victim, EntityId Attacker);
 
 	// Movement
@@ -386,6 +387,7 @@ private:
 	bool PathToPoint(Entity& E, const Vec2& Point);
 	bool PathToRect(Entity& E, const TileRect& Rect, int Expand);
 	bool FollowPath(Entity& E, float Dt); // true when arrived
+	bool StepTowards(Entity& E, const Vec2& Aim, float Dt); // straight step, sliding along walls
 	void StopMoving(Entity& E);
 	void FaceTowards(Entity& E, const Vec2& Point, float Dt);
 

@@ -250,6 +250,93 @@ BH_TEST(World_RangedUsesProjectiles)
 	BH_EXPECT(T != nullptr && T->Hp < T->MaxHp);
 }
 
+BH_TEST(World_RangedUnitsCloseInFromTheDiagonal)
+{
+	// A target 6 tiles away on both axes is out of range (8.5) but inside the square around
+	// it that ranged units once treated as "arrived": the archer must still walk in and shoot.
+	const Archetype Shooters[] = {Archetype::Ranger, Archetype::Sage};
+	for (Archetype Shooter : Shooters)
+	{
+		for (int Dir = 0; Dir < 4; ++Dir)
+		{
+			World W;
+			OpenField(W);
+			const float Sx = (Dir & 1) != 0 ? 1.f : -1.f;
+			const float Sy = (Dir & 2) != 0 ? 1.f : -1.f;
+			const Vec2 Target(16.5f, 16.5f);
+			const EntityId A = W.SpawnUnit(Shooter, Team::Player, Target + Vec2(6.f * Sx, 6.f * Sy));
+			const EntityId B = W.SpawnUnit(Archetype::Thornback, Team::Enemy, Target);
+			W.CmdStop(Ids(B));
+			W.CmdAttack(Ids(A), B);
+			RunFor(W, 5.f);
+			const Entity* T = W.Find(B);
+			BH_EXPECT_MSG(T != nullptr && T->Hp < T->MaxHp, "%s from direction %d never hit its target", GetDef(Shooter).Name, Dir);
+		}
+	}
+}
+
+BH_TEST(World_WalkersPassHeadOn)
+{
+	// Two units walking straight at each other on the same line must not shove each other to a
+	// standstill (they used to, on tile-centre waypoints next to buildings).
+	World W;
+	OpenField(W);
+	const EntityId A = W.SpawnUnit(Archetype::Lamplighter, Team::Player, Vec2(16.5f, 10.5f));
+	const EntityId B = W.SpawnUnit(Archetype::Shieldbearer, Team::Player, Vec2(16.5f, 20.5f));
+	W.CmdMove(Ids(A), Vec2(16.5f, 22.5f), false);
+	W.CmdMove(Ids(B), Vec2(16.5f, 8.5f), false);
+	RunFor(W, 8.f);
+	const Entity* EA = W.Find(A);
+	const Entity* EB = W.Find(B);
+	BH_EXPECT(EA != nullptr && EB != nullptr);
+	if (EA != nullptr && EB != nullptr)
+	{
+		BH_EXPECT_MSG(Vec2::Dist(EA->Pos, Vec2(16.5f, 22.5f)) < 1.f, "first walker stopped at %.1f,%.1f", EA->Pos.X, EA->Pos.Y);
+		BH_EXPECT_MSG(Vec2::Dist(EB->Pos, Vec2(16.5f, 8.5f)) < 1.f, "second walker stopped at %.1f,%.1f", EB->Pos.X, EB->Pos.Y);
+	}
+}
+
+BH_TEST(World_RepeatedAttackTapsKeepSwinging)
+{
+	// Players tap the same enemy again and again; each tap used to cancel the swing in progress.
+	World W;
+	OpenField(W);
+	const EntityId S = W.SpawnUnit(Archetype::Shieldbearer, Team::Player, Vec2(10.5f, 10.5f));
+	const EntityId G = W.SpawnUnit(Archetype::Thornback, Team::Enemy, Vec2(11.4f, 10.5f));
+	W.CmdStop(Ids(G));
+	for (int I = 0; I < 30; ++I) // a tap every 0.2 s for 6 s
+	{
+		W.CmdAttack(Ids(S), G);
+		RunFor(W, 0.2f);
+	}
+	const Entity* T = W.Find(G);
+	BH_EXPECT_MSG(T == nullptr || T->Hp < T->MaxHp - 30.f, "only %.0f damage in 6 s of tapping", T != nullptr ? T->MaxHp - T->Hp : 0.f);
+}
+
+BH_TEST(World_BlockedAttackerStrikesWhatIsInReach)
+{
+	// Ordered onto a target it cannot reach (across water), a soldier with an enemy at its side
+	// fights that enemy instead of standing in the fight.
+	World W;
+	OpenField(W);
+	for (int Y = 0; Y < 32; ++Y)
+	{
+		W.GetMap().At(10, Y).G = Ground::Water;
+		W.GetMap().At(11, Y).G = Ground::Water;
+	}
+	const EntityId S = W.SpawnUnit(Archetype::Shieldbearer, Team::Player, Vec2(8.5f, 16.5f));
+	const EntityId Far = W.SpawnUnit(Archetype::Thornback, Team::Enemy, Vec2(13.5f, 16.5f));
+	const EntityId Near = W.SpawnUnit(Archetype::Thornback, Team::Enemy, Vec2(8.5f, 17.4f));
+	W.CmdStop(Ids(Far));
+	W.CmdStop(Ids(Near));
+	W.CmdAttack(Ids(S), Far);
+	RunFor(W, 4.f);
+	const Entity* N = W.Find(Near);
+	BH_EXPECT_MSG(N == nullptr || N->Hp < N->MaxHp, "the soldier never struck the enemy beside it");
+	const Entity* Me = W.Find(S);
+	BH_EXPECT(Me != nullptr && Me->Order == OrderType::Attack && Me->OrderTarget == Far);
+}
+
 BH_TEST(World_TowerShootsEnemies)
 {
 	World W;

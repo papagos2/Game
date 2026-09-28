@@ -97,14 +97,28 @@ void HudFillSelection(const Session& S, SelectionPanel& P)
 	{
 		P.bConstructing = !E.bConstructed;
 		P.BuildProgress = E.BuildProgress;
+		std::string Extra;
+		auto Append = [&Extra](const std::string& Part)
+		{
+			Extra += Extra.empty() ? Part : ", " + Part;
+		};
 		if (D.SupplyProvided > 0 && E.Owner == Team::Player)
 		{
-			P.Extra = std::string("+") + std::to_string(D.SupplyProvided) + " supply";
+			Append("+" + std::to_string(D.SupplyProvided) + " supply");
+		}
+		if (D.HealAmount > 0.f && D.HealRange > 0.f && !IsUnit(E.Type))
+		{
+			Append("heals allies nearby");
 		}
 		if (D.IncomePerSecond > 0.f)
 		{
-			P.Extra = "Heals allies nearby, yields Sunstone";
+			Append("yields " + std::to_string(static_cast<int>(D.IncomePerSecond * 60.f + 0.5f)) + " Sunstone a minute");
 		}
+		if (!Extra.empty() && Extra[0] >= 'a' && Extra[0] <= 'z')
+		{
+			Extra[0] = static_cast<char>(Extra[0] - 'a' + 'A');
+		}
+		P.Extra = Extra;
 		for (size_t I = 0; I < E.Queue.size(); ++I)
 		{
 			const ProductionItem& Item = E.Queue[I];

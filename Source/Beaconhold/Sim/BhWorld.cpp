@@ -856,6 +856,17 @@ void World::CmdAttack(const std::vector<EntityId>& Units, EntityId Target)
 		{
 			continue;
 		}
+		if (First == NoEntity)
+		{
+			First = Id;
+			Owner = E->Owner;
+		}
+		if (E->Order == OrderType::Attack && E->OrderTarget == Target)
+		{
+			// Tapping the same target again (common on touch screens) must not cancel the swing
+			// in progress or re-plan the approach.
+			continue;
+		}
 		E->Order = OrderType::Attack;
 		E->OrderTarget = Target;
 		E->EngageTarget = NoEntity;
@@ -864,11 +875,6 @@ void World::CmdAttack(const std::vector<EntityId>& Units, EntityId Target)
 		E->bHasPath = false;
 		E->bResumeGather = false;
 		E->BuildTarget = NoEntity;
-		if (First == NoEntity)
-		{
-			First = Id;
-			Owner = E->Owner;
-		}
 	}
 	if (First != NoEntity)
 	{

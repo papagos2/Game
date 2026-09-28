@@ -1,6 +1,8 @@
 // Scripted player for mission playthrough tests.
 #include "Bot.h"
 
+#include "Playtest.h"
+
 #include "BhHud.h"
 
 #include <cstdio>
@@ -15,6 +17,7 @@ namespace
 struct BotState
 {
 	float NextThink = 0.f;
+	float NextRebalance = 0.f;
 	float LastAttackOrder = -100.f;
 	bool bAttacking = false;
 	int TrainToggle = 0;
@@ -174,7 +177,7 @@ bool FindThreat(const World& W, Vec2& Out)
 	return bFound;
 }
 
-void ManageWorkers(Session& S, BotState& St)
+void ManageWorkers(Session& S, const BotConfig& Cfg, BotState& St)
 {
 	World& W = S.GetWorld();
 	PlayerControl& C = S.GetControl();
@@ -214,11 +217,16 @@ void ManageWorkers(Session& S, BotState& St)
 			continue;
 		}
 		C.SelectOne(W, Id);
-		const bool bWantSun = OnSun <= OnWood + 1;
+		bool bWantSun = OnSun <= OnWood + 1;
+		if (Cfg.bSmartEconomy)
+		{
+			const TeamState& T = W.GetTeam(Team::Player);
+			bWantSun = T.Res[0] < T.Res[1] + 150 || OnWood > OnSun * 2 + 2;
+		}
 		const EntityId Node = W.FindNearestNode(Keep, 30.f, NoEntity);
 		const EntityId FarNode = W.FindNearestNode(E->Pos, 60.f, NoEntity);
 		Tile Tree;
-		const bool bTree = W.GetMap().FindNearestTree(Keep, 14.f, Tree);
+		const bool bTree = W.GetMap().FindNearestTree(Keep, 14.f, Tree) || W.GetMap().FindNearestTree(E->Pos, 40.f, Tree);
 		if (bWantSun && (Node != NoEntity || FarNode != NoEntity))
 		{
 			const Entity* N = W.Find(Node != NoEntity ? Node : FarNode);
@@ -235,7 +243,57 @@ void ManageWorkers(Session& S, BotState& St)
 			C.TapWorld(W, W.Find(FarNode)->Pos, 0.2f, false, nullptr);
 		}
 	}
-	C.ClearSelection();
+	// An attentive player moves workers when one resource piles up and the other runs dry.
+	if (Cfg.bSmartEconomy && W.GetTime() >= St.NextRebalance)
+	{
+		St.NextRebalance = W.GetTime() + 10.f;
+		const TeamState& T = W.GetTeam(Team::Player);
+		Resource From = Resource::None;
+		if (T.Res[0] > 400 && T.Res[1] < 120)
+		{
+			From = Resource::Sunstone;
+		}
+		else if (T.Res[1] > 400 && T.Res[0] < 120)
+		{
+			From = Resource::Timber;
+		}
+		if (From != Resource::None)
+		{
+			int Moved = 0;
+			for (const Entity& E : W.GetEntities())
+			{
+				if (Moved >= 2)
+				{
+					break;
+				}
+				if (!E.bAlive || E.Owner != Team::Player || E.Type != Archetype::Lamplighter || E.Order != OrderType::Gather || E.GatherType != From ||
+					E.CarryAmount > 0)
+				{
+					continue;
+				}
+				C.SelectOne(W, E.Id);
+				if (From == Resource::Sunstone)
+				{
+					Tile Tree;
+					if (W.GetMap().FindNearestTree(E.Pos, 16.f, Tree))
+					{
+						C.TapWorld(W, Tree.Center(), 0.05f, false, nullptr);
+						++Moved;
+					}
+				}
+				else
+				{
+					const EntityId Node = W.FindNearestNode(E.Pos, 40.f, NoEntity);
+					if (const Entity* N = W.Find(Node))
+					{
+						C.TapWorld(W, N->Pos, 0.2f, false, nullptr);
+						++Moved;
+					}
+				}
+			}
+			C.ClearSelection();
+		}
+	}
 }
 
 void ManageBase(Session& S, const BotConfig& Cfg, BotState& St)
@@ -271,19 +329,30 @@ void ManageBase(Session& S, const BotConfig& Cfg, BotState& St)
 		TryBuild(S, Archetype::Barracks, Keep + Vec2(-4.f, -5.f));
 	}
 	const bool bHaveBarracks = W.HasCompleted(Team::Player, Archetype::Barracks);
-	if (bHaveBarracks && Mission != 0 && W.CountOwned(Team::Player, Archetype::Forge, true) == 0 && Time > 220.f)
+	const bool bRiders = Cfg.Army == BotArmy::Riders;
+	const bool bSages = Cfg.Army == BotArmy::Sages;
+	if (bHaveBarracks && Mission != 0 && W.CountOwned(Team::Player, Archetype::Forge, true) == 0 && (Time > 220.f || bRiders))
 	{
 		TryBuild(S, Archetype::Forge, Keep + Vec2(6.f, -3.f));
 	}
-	if (Cfg.bBuildTowers && bHaveBarracks && W.CountOwned(Team::Player, Archetype::Watchtower, true) < 3)
+	if (bRiders && Mission != 0 && W.HasCompleted(Team::Player, Archetype::Forge) && W.CountOwned(Team::Player, Archetype::StagLodge, true) < 2)
+	{
+		TryBuild(S, Archetype::StagLodge, Keep + Vec2(-7.f, 1.f + 4.f * static_cast<float>(W.CountOwned(Team::Player, Archetype::StagLodge, true))));
+	}
+	if (bSages && Mission != 0 && bHaveBarracks && W.CountOwned(Team::Player, Archetype::Sanctum, true) == 0)
+	{
+		TryBuild(S, Archetype::Sanctum, Keep + Vec2(7.f, 6.f));
+	}
+	if (Cfg.bBuildTowers && bHaveBarracks && W.CountOwned(Team::Player, Archetype::Watchtower, true) < Cfg.TowerCount)
 	{
 		TryBuild(S, Archetype::Watchtower, Keep + Vec2(-4.f + 4.f * static_cast<float>(W.CountOwned(Team::Player, Archetype::Watchtower, true)), -7.f));
 	}
-	if (Mission == 2 && W.HasCompleted(Team::Player, Archetype::Forge) && W.CountOwned(Team::Player, Archetype::StagLodge, true) == 0 && Time > 420.f)
+	if (Cfg.Army == BotArmy::Mixed && Mission == 2 && W.HasCompleted(Team::Player, Archetype::Forge) &&
+		W.CountOwned(Team::Player, Archetype::StagLodge, true) == 0 && Time > 420.f)
 	{
 		TryBuild(S, Archetype::StagLodge, Keep + Vec2(-7.f, 1.f));
 	}
-	if (Mission == 2 && bHaveBarracks && W.CountOwned(Team::Player, Archetype::Sanctum, true) == 0 && Time > 480.f)
+	if (Cfg.Army == BotArmy::Mixed && Mission == 2 && bHaveBarracks && W.CountOwned(Team::Player, Archetype::Sanctum, true) == 0 && Time > 480.f)
 	{
 		TryBuild(S, Archetype::Sanctum, Keep + Vec2(7.f, 6.f));
 	}
@@ -329,16 +398,41 @@ void ManageBase(Session& S, const BotConfig& Cfg, BotState& St)
 		}
 		if (E.Type == Archetype::Barracks)
 		{
-			const Archetype Pick = (St.TrainToggle++ % 2 == 0) ? Archetype::Shieldbearer : Archetype::Ranger;
+			Archetype Pick = (St.TrainToggle++ % 2 == 0) ? Archetype::Shieldbearer : Archetype::Ranger;
+			switch (Cfg.Army)
+			{
+			case BotArmy::Shields:
+			case BotArmy::Sages:
+				Pick = Archetype::Shieldbearer;
+				break;
+			case BotArmy::Rangers:
+				Pick = Archetype::Ranger;
+				break;
+			case BotArmy::Riders:
+				// A small guard until the Lodge is up.
+				if (W.HasCompleted(Team::Player, Archetype::StagLodge) || W.CountOwned(Team::Player, Archetype::Shieldbearer, true) >= 4)
+				{
+					continue;
+				}
+				Pick = Archetype::Shieldbearer;
+				break;
+			case BotArmy::Mixed:
+				break;
+			}
+			if (bSages && W.CountOwned(Team::Player, Archetype::Shieldbearer, true) > W.CountOwned(Team::Player, Archetype::Sage, true) + 3 &&
+				W.HasCompleted(Team::Player, Archetype::Sanctum))
+			{
+				continue; // let the Sanctum catch up
+			}
 			TryTrain(S, E, Pick, 2);
 		}
 		else if (E.Type == Archetype::StagLodge)
 		{
-			TryTrain(S, E, Archetype::StagRider, 1);
+			TryTrain(S, E, Archetype::StagRider, bRiders ? 2 : 1);
 		}
-		else if (E.Type == Archetype::Sanctum && W.CountOwned(Team::Player, Archetype::Sage, true) < 3)
+		else if (E.Type == Archetype::Sanctum && (bSages || W.CountOwned(Team::Player, Archetype::Sage, true) < 3))
 		{
-			TryTrain(S, E, Archetype::Sage, 1);
+			TryTrain(S, E, Archetype::Sage, bSages ? 2 : 1);
 		}
 		else if (E.Type == Archetype::Forge && E.Queue.empty())
 		{
@@ -455,7 +549,25 @@ void ManageArmy(Session& S, const BotConfig& Cfg, BotState& St)
 }
 } // namespace
 
-BotReport PlayMission(Session& S, const BotConfig& Config, float MaxSeconds)
+const char* BotArmyName(BotArmy A)
+{
+	switch (A)
+	{
+	case BotArmy::Mixed:
+		return "mixed";
+	case BotArmy::Shields:
+		return "shields";
+	case BotArmy::Rangers:
+		return "rangers";
+	case BotArmy::Riders:
+		return "riders";
+	case BotArmy::Sages:
+		return "sages";
+	}
+	return "?";
+}
+
+BotReport PlayMission(Session& S, const BotConfig& Config, float MaxSeconds, Telemetry* Observer)
 {
 	BotReport R;
 	BotState St;
@@ -463,10 +575,18 @@ BotReport PlayMission(Session& S, const BotConfig& Config, float MaxSeconds)
 	std::vector<GameEvent> Events;
 	char Line[256];
 	float NextLog = 0.f;
+	if (Observer != nullptr)
+	{
+		Observer->Begin(S);
+	}
 	while (W.GetTime() < MaxSeconds && S.GetMission().Outcome == MissionOutcome::InProgress)
 	{
 		S.Update(World::TickSeconds, nullptr);
 		S.TakeEvents(Events);
+		if (Observer != nullptr)
+		{
+			Observer->OnTick(S, Events);
+		}
 		if (S.GetMission().IsTutorialActive())
 		{
 			S.ContinueTutorial();
@@ -474,7 +594,7 @@ BotReport PlayMission(Session& S, const BotConfig& Config, float MaxSeconds)
 		if (W.GetTime() >= St.NextThink)
 		{
 			St.NextThink = W.GetTime() + 0.5f;
-			ManageWorkers(S, St);
+			ManageWorkers(S, Config, St);
 			ManageBase(S, Config, St);
 			ManageArmy(S, Config, St);
 		}
@@ -489,6 +609,10 @@ BotReport PlayMission(Session& S, const BotConfig& Config, float MaxSeconds)
 				ArmySupply(W), W.CountUnits(Team::Enemy, false), W.GetTeam(Team::Enemy).Res[0]);
 			R.Log += Line;
 		}
+	}
+	if (Observer != nullptr)
+	{
+		Observer->End(S);
 	}
 	const TeamState& T = W.GetTeam(Team::Player);
 	R.Outcome = S.GetMission().Outcome;
