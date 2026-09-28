@@ -337,6 +337,67 @@ BH_TEST(World_BlockedAttackerStrikesWhatIsInReach)
 	BH_EXPECT(Me != nullptr && Me->Order == OrderType::Attack && Me->OrderTarget == Far);
 }
 
+BH_TEST(World_FullOutcropSendsWorkersOn)
+{
+	// Ten workers sent to one outcrop: six mine it, the rest move on to a second outcrop nearby
+	// instead of queueing (they used to wait, idle, for minutes).
+	World W;
+	OpenField(W);
+	W.SpawnBuilding(Archetype::Keep, Team::Player, Tile(4, 4), true);
+	const EntityId First = W.SpawnResourceNode(Archetype::SunstoneNode, Tile(12, 5), 1500);
+	const EntityId Second = W.SpawnResourceNode(Archetype::SunstoneNode, Tile(12, 13), 1500);
+	std::vector<EntityId> Workers;
+	for (int I = 0; I < 10; ++I)
+	{
+		Workers.push_back(W.SpawnUnit(Archetype::Lamplighter, Team::Player, Vec2(9.5f + 0.4f * static_cast<float>(I % 3), 9.5f + 0.4f * static_cast<float>(I / 3))));
+	}
+	W.CmdGatherNode(Workers, First);
+	RunFor(W, 20.f);
+	int OnFirst = 0;
+	int OnSecond = 0;
+	for (EntityId Id : Workers)
+	{
+		const Entity* E = W.Find(Id);
+		if (E != nullptr && E->GatherType == Resource::Sunstone)
+		{
+			OnFirst += E->GatherNode == First ? 1 : 0;
+			OnSecond += E->GatherNode == Second ? 1 : 0;
+		}
+	}
+	BH_EXPECT_MSG(OnFirst <= GatherTuning::MaxMinersPerNode && OnSecond >= 10 - GatherTuning::MaxMinersPerNode, "first %d, second %d", OnFirst, OnSecond);
+	BH_EXPECT(W.GetTeam(Team::Player).Stats.Gathered[0] > 0);
+}
+
+BH_TEST(World_SunburstIsCastOnePerTap)
+{
+	// Four Sages selected: one tap casts one Sunburst, from the Sage with the most Gloam around
+	// it; the others stay ready for the next taps.
+	World W;
+	OpenField(W);
+	std::vector<EntityId> Sages;
+	Sages.push_back(W.SpawnUnit(Archetype::Sage, Team::Player, Vec2(4.5f, 4.5f)));
+	Sages.push_back(W.SpawnUnit(Archetype::Sage, Team::Player, Vec2(5.5f, 4.5f)));
+	Sages.push_back(W.SpawnUnit(Archetype::Sage, Team::Player, Vec2(20.5f, 20.5f)));
+	Sages.push_back(W.SpawnUnit(Archetype::Sage, Team::Player, Vec2(4.5f, 5.5f)));
+	const EntityId G1 = W.SpawnUnit(Archetype::Gloomling, Team::Enemy, Vec2(21.5f, 20.5f));
+	const EntityId G2 = W.SpawnUnit(Archetype::Gloomling, Team::Enemy, Vec2(20.5f, 21.5f));
+	RunFor(W, World::TickSeconds); // area queries see units from the next tick on
+	BH_EXPECT(W.CmdAbility(Sages, Ability::Sunburst) == 1);
+	const Entity* Caster = W.Find(Sages[2]);
+	BH_EXPECT_MSG(Caster != nullptr && Caster->AbilityCooldown > 0.f, "the Sage among the Gloam should have cast");
+	int Ready = 0;
+	for (EntityId Id : Sages)
+	{
+		const Entity* E = W.Find(Id);
+		Ready += E != nullptr && E->AbilityCooldown <= 0.f ? 1 : 0;
+	}
+	BH_EXPECT(Ready == 3);
+	const Entity* E1 = W.Find(G1);
+	const Entity* E2 = W.Find(G2);
+	BH_EXPECT(E1 != nullptr && E1->Hp < E1->MaxHp && E2 != nullptr && E2->Hp < E2->MaxHp);
+	BH_EXPECT(W.CmdAbility(Sages, Ability::Sunburst) == 1);
+}
+
 BH_TEST(World_TowerShootsEnemies)
 {
 	World W;

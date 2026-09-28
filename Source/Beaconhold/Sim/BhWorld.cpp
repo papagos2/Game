@@ -1253,7 +1253,39 @@ int World::CmdAbility(const std::vector<EntityId>& Units, Ability A)
 	const AbilityDef& AD = GetAbilityDef(A);
 	int Cast = 0;
 	std::vector<EntityId> Near;
-	for (EntityId Id : Units)
+	std::vector<EntityId> Casters = Units;
+	if (A == Ability::Sunburst)
+	{
+		// Area abilities are cast by one unit per command, the one placed best, so a group does
+		// not waste (or stack) them all at once; tapping again casts the next.
+		EntityId Best = NoEntity;
+		int BestScore = -1;
+		for (EntityId Id : Units)
+		{
+			const Entity* E = Find(Id);
+			if (E == nullptr || !E->bAlive || GetDef(E->Type).AbilityId != A || E->AbilityCooldown > 0.f)
+			{
+				continue;
+			}
+			QueryRadius(E->Pos, AD.Radius, Near);
+			int Score = 0;
+			for (EntityId TargetId : Near)
+			{
+				const Entity* T = Find(TargetId);
+				if (T != nullptr && T->bAlive && T->IsUnit())
+				{
+					Score += AreEnemies(E->Owner, T->Owner) ? 2 : (T->Owner == E->Owner && T->Hp < T->MaxHp ? 1 : 0);
+				}
+			}
+			if (Score > BestScore)
+			{
+				BestScore = Score;
+				Best = Id;
+			}
+		}
+		Casters.assign(1, Best);
+	}
+	for (EntityId Id : Casters)
 	{
 		Entity* E = Find(Id);
 		if (E == nullptr || !E->bAlive || GetDef(E->Type).AbilityId != A || E->AbilityCooldown > 0.f)

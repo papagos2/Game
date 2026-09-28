@@ -23,6 +23,7 @@ struct SessionConfig
 	Difficulty Diff = Difficulty::Normal;
 	int BoonRanks[NumBoons] = {};
 	bool bTutorial = true;
+	uint32_t Seed = 0; // 0: the mission's own seed (the game); others vary a playtest
 };
 
 class Session

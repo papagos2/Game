@@ -121,7 +121,7 @@ std::array<ArchetypeDef, NumArchetypes> BuildArchetypeTable()
 		D.Windup = 0.35f;
 		D.ProjectileSpeed = 11.f;
 		D.AbilityId = Ability::Sunburst;
-		D.HealAmount = 12.f;
+		D.HealAmount = 10.f;
 		D.HealCooldown = 1.4f;
 		D.HealRange = 5.f;
 	}
@@ -578,6 +578,22 @@ std::array<BoonDef, NumBoons> BuildBoonTable()
 	return T;
 }
 } // namespace
+
+const GloamPickWeights& GetGloamPickWeights(Archetype GloamUnit)
+{
+	static const GloamPickWeights Gloomling = {1.f, -0.8f, 1.2f, -0.6f, 1.2f};
+	static const GloamPickWeights Thornback = {0.35f, 1.4f, -0.2f, 1.2f, 0.2f};
+	static const GloamPickWeights Other = {1.f, 0.f, 0.f, 0.f, 0.f};
+	switch (GloamUnit)
+	{
+	case Archetype::Gloomling:
+		return Gloomling;
+	case Archetype::Thornback:
+		return Thornback;
+	default:
+		return Other;
+	}
+}
 
 const ArchetypeDef& GetDef(Archetype A)
 {

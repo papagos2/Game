@@ -12,6 +12,15 @@
 
 namespace bh
 {
+// A building's next unit, chosen when it fell idle and kept until the gloom for it is there, so
+// cheap units cannot keep starving dear ones. Served first come, first served.
+struct AIPendingPick
+{
+	EntityId Building = NoEntity;
+	Archetype Unit = Archetype::None;
+	float Since = 0.f;
+};
+
 class EnemyAI
 {
 public:
@@ -33,8 +42,16 @@ public:
 	Vec2 Rally;
 	std::vector<EntityId> Attackers;
 	float LastDefenseTime = -100.f;
+	// Shares of the Warden army's supply: Shieldbearers, Rangers, Stag Riders, Sages. Measured
+	// every think, so not saved.
+	float ArmyShare[4] = {0.f, 0.f, 0.f, 0.f};
+	std::vector<AIPendingPick> Pending;
+
+	// The unit Building trains next, countering the Warden army.
+	Archetype PickCounter(World& W, const Entity& Building) const;
 
 private:
+	void MeasurePlayerArmy(const World& W);
 	void Produce(World& W);
 	void ManageAttackers(World& W);
 	void Defend(World& W);

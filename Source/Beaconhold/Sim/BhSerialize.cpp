@@ -241,6 +241,7 @@ struct SaveBlob
 	Vec2 Rally;
 	std::vector<EntityId> Attackers;
 	float LastDefenseTime = 0.f;
+	std::vector<AIPendingPick> AIPending;
 	// Camera & clock
 	Vec2 Focus;
 	float Distance = 20.f;
@@ -300,6 +301,7 @@ void SaveVisitBlob(Ar& A, SaveBlob& B)
 	A(B.Rally);
 	A(B.Attackers);
 	A(B.LastDefenseTime);
+	A(B.AIPending);
 	A(B.Focus);
 	A(B.Distance);
 	A(B.Accumulator);
@@ -363,6 +365,7 @@ void SaveSession(const Session& S, std::vector<uint8_t>& OutBytes)
 	B.Rally = AI.Rally;
 	B.Attackers = AI.Attackers;
 	B.LastDefenseTime = AI.LastDefenseTime;
+	B.AIPending = AI.Pending;
 	B.Focus = S.GetCamera().Focus;
 	B.Distance = S.GetCamera().TargetDistance;
 	B.Accumulator = S.GetAlpha() * World::TickSeconds;
@@ -478,6 +481,7 @@ bool LoadSession(Session& S, const std::vector<uint8_t>& Bytes, std::string& Out
 	AI.Rally = B.Rally;
 	AI.Attackers = B.Attackers;
 	AI.LastDefenseTime = B.LastDefenseTime;
+	AI.Pending = B.AIPending;
 
 	S.GetCamera().Init(B.MapW, B.MapH, B.Focus);
 	S.GetCamera().Distance = S.GetCamera().TargetDistance = B.Distance;

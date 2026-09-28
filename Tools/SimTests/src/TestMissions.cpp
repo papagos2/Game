@@ -169,3 +169,36 @@ BH_TEST(Missions_AIThreatensPassivePlayer)
 	BH_EXPECT(S.GetAI().WavesLaunched >= 3);
 	BH_EXPECT_MSG(R.UnitsLost > 0 || R.Outcome == MissionOutcome::Lost, "the AI never hurt a passive player");
 }
+
+BH_TEST(Missions_StarGoals)
+{
+	// The Long Dusk ends at dawn for everyone, so its second star asks for a clean defence.
+	BH_EXPECT(StarGoalText(GetMission(1), 1) == "Lose no buildings");
+	BH_EXPECT(StarGoalText(GetMission(2), 1) == "Finish within 18:00");
+	for (int Lose = 0; Lose < 2; ++Lose)
+	{
+		Session S;
+		SessionConfig C;
+		C.MissionIndex = 1;
+		C.bTutorial = false;
+		std::string Err;
+		BH_EXPECT(S.Start(C, Err));
+		World& W = S.GetWorld();
+		for (const TileRect& Site : W.GetMap().BeaconSites)
+		{
+			W.SpawnBuilding(Archetype::Beacon, Team::Player, Tile(Site.X0, Site.Y0), true);
+		}
+		const EntityId Cottage = W.SpawnBuilding(Archetype::Cottage, Team::Player, Tile(30, 26), true);
+		if (Lose == 1)
+		{
+			W.Kill(Cottage, NoEntity);
+		}
+		S.GetMission().Elapsed = 599.9f;
+		for (int I = 0; I < 10 && S.GetMission().Outcome == MissionOutcome::InProgress; ++I)
+		{
+			S.Update(World::TickSeconds, nullptr);
+		}
+		BH_EXPECT(S.GetMission().Outcome == MissionOutcome::Won);
+		BH_EXPECT_MSG(S.GetMission().Stars[1] == (Lose == 0), "second star %d with a building %s", S.GetMission().Stars[1] ? 1 : 0, Lose == 1 ? "lost" : "kept");
+	}
+}

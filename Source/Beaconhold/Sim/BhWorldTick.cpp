@@ -595,6 +595,39 @@ void World::ResolveStrike(Entity& E)
 	}
 }
 
+EntityId World::FindOutcropWithRoom(const Entity& Worker, EntityId Exclude, float MaxDist) const
+{
+	EntityId Best = NoEntity;
+	float BestD = MaxDist;
+	for (const Entity& N : Entities)
+	{
+		if (!N.bAlive || !N.IsResourceNode() || N.Id == Exclude || N.Amount <= 0)
+		{
+			continue;
+		}
+		const float D = N.Rect.DistanceTo(Worker.Pos);
+		if (D >= BestD)
+		{
+			continue;
+		}
+		int Assigned = 0;
+		for (const Entity& W : Entities)
+		{
+			if (W.bAlive && W.Owner == Worker.Owner && W.Id != Worker.Id && W.GatherNode == N.Id && W.GatherType == Resource::Sunstone &&
+				(W.Order == OrderType::Gather || W.Order == OrderType::Return))
+			{
+				++Assigned;
+			}
+		}
+		if (Assigned < GatherTuning::MaxMinersPerNode)
+		{
+			BestD = D;
+			Best = N.Id;
+		}
+	}
+	return Best;
+}
+
 EntityId World::FindEnemyInReach(const Entity& E) const
 {
 	const float Range = GetRange(E);
@@ -631,6 +664,7 @@ EntityId World::ScanForTarget(const Entity& E, float Radius) const
 {
 	std::vector<EntityId> Near;
 	QueryRadius(E.Pos, Radius, Near);
+	const bool bRanged = GetDef(E.Type).ProjectileSpeed > 0.f;
 	EntityId Best = NoEntity;
 	float BestScore = 1e9f;
 	for (EntityId Id : Near)
@@ -648,6 +682,10 @@ EntityId World::ScanForTarget(const Entity& E, float Radius) const
 		else if (GetDef(T->Type).IsWorker)
 		{
 			Score += 1.5f;
+		}
+		else if (bRanged && GetDef(T->Type).HealAmount > 0.f)
+		{
+			Score -= 2.5f; // shooters pick off healers first
 		}
 		if (T->LastAttacker == E.Id)
 		{
@@ -941,7 +979,15 @@ void World::UpdateGather(Entity& W, float Dt)
 		{
 			if (Node->Miners >= GatherTuning::MaxMinersPerNode)
 			{
-				W.Act = Activity::Idle; // wait for a free spot
+				// Full: move on to a nearby outcrop with room, like a player would, rather than
+				// queue here. Wait only if every outcrop close by is busy too.
+				const EntityId Other = FindOutcropWithRoom(W, Node->Id, GatherTuning::RedirectRadius);
+				if (Other != NoEntity)
+				{
+					SetGatherNode(W, Other);
+					return;
+				}
+				W.Act = Activity::Idle;
 				return;
 			}
 			++Node->Miners;

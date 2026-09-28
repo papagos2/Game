@@ -365,9 +365,10 @@ MissionSummary BuildSummary(const Session& S)
 	{
 		Sum.StarEarned[I] = M.Stars[I];
 	}
-	Sum.StarText[0] = "Victory";
-	Sum.StarText[1] = std::string("Finish within ") + FormatTime(Def.ParTime);
-	Sum.StarText[2] = "Keep never below half health";
+	for (int I = 0; I < 3; ++I)
+	{
+		Sum.StarText[I] = StarGoalText(Def, I);
+	}
 	Sum.Title = Sum.bWon ? "Victory" : "Defeat";
 	Sum.Text = M.EndReason;
 	Sum.Time = M.Elapsed;

@@ -2,6 +2,7 @@
 #include "BhAI.h"
 
 #include <algorithm>
+#include <cstddef>
 
 namespace bh
 {
@@ -107,6 +108,7 @@ void EnemyAI::Tick(World& W, float Dt)
 		return;
 	}
 	ThinkTimer = 0.5f;
+	MeasurePlayerArmy(W);
 	Produce(W);
 	Defend(W);
 	ManageAttackers(W);
@@ -132,10 +134,6 @@ void EnemyAI::Produce(World& W)
 			}
 		}
 	}
-	if (Army >= Config.ArmyCap)
-	{
-		return;
-	}
 	const DifficultyTuning Tuning = GetDifficultyTuning(Diff);
 	const bool bTitanTime = Config.TitanAfter >= 0.f && W.GetTime() >= Config.TitanAfter * Tuning.EnemyTiming;
 	const bool bTitanExists = W.CountOwned(Team::Enemy, Archetype::BogTitan, true) > 0;
@@ -155,56 +153,146 @@ void EnemyAI::Produce(World& W)
 		}
 	}
 	const bool bSaveForTitan = bTitanTime && !bTitanExists && !bTitanQueued;
-	const int TitanCost = GetDef(Archetype::BogTitan).CostSunstone;
 
-	// Collect producers first: CmdTrain may not reallocate, but keep the loop simple.
-	std::vector<EntityId> Producers;
+	// Forget picks of buildings that are gone or busy; idle producers pick their next unit.
+	Pending.erase(std::remove_if(Pending.begin(), Pending.end(), [&W](const AIPendingPick& P)
+	{
+		const Entity* B = W.Find(P.Building);
+		return B == nullptr || !B->bAlive || !B->Queue.empty();
+	}), Pending.end());
 	for (const Entity& E : W.GetEntities())
 	{
-		if (E.bAlive && E.Owner == Team::Enemy && E.IsBuilding() && E.bConstructed && E.Queue.empty() &&
-			GetDef(E.Type).Trains[0] != Archetype::None)
-		{
-			Producers.push_back(E.Id);
-		}
-	}
-	for (EntityId Id : Producers)
-	{
-		if (Army >= Config.ArmyCap)
-		{
-			break;
-		}
-		const Entity* B = W.Find(Id);
-		if (B == nullptr)
+		if (!E.bAlive || E.Owner != Team::Enemy || !E.IsBuilding() || !E.bConstructed || !E.Queue.empty() || GetDef(E.Type).Trains[0] == Archetype::None)
 		{
 			continue;
 		}
-		Archetype Pick = Archetype::Gloomling;
-		switch (B->Type)
+		const EntityId Id = E.Id;
+		const bool bHasPick = std::any_of(Pending.begin(), Pending.end(), [Id](const AIPendingPick& P) { return P.Building == Id; });
+		if (!bHasPick)
 		{
-		case Archetype::GloamHeart:
-			Pick = bSaveForTitan ? Archetype::BogTitan : Archetype::Gloomling;
-			break;
-		case Archetype::Burrow:
-			Pick = (W.GetTime() > 150.f && W.GetRng().Chance(0.4f)) ? Archetype::Thornback : Archetype::Gloomling;
-			break;
-		case Archetype::Hexroot:
-			Pick = Archetype::Hexer;
-			break;
-		default:
-			Pick = GetDef(B->Type).Trains[0];
-			break;
-		}
-		const int Gloom = W.GetTeam(Team::Enemy).Res[0];
-		const int Cost = GetDef(Pick).CostSunstone;
-		if (Pick != Archetype::BogTitan && bSaveForTitan && Gloom - Cost < TitanCost)
-		{
-			continue; // saving up for a Titan
-		}
-		if (Gloom >= Cost && W.CmdTrain(Id, Pick))
-		{
-			++Army;
+			AIPendingPick P;
+			P.Building = Id;
+			P.Unit = PickCounter(W, E);
+			P.Since = W.GetTime();
+			Pending.push_back(P);
 		}
 	}
+	// A Titan, when due, is the Heart's next unit whatever it picked before.
+	if (bSaveForTitan)
+	{
+		for (AIPendingPick& P : Pending)
+		{
+			const Entity* B = W.Find(P.Building);
+			if (B != nullptr && B->Type == Archetype::GloamHeart)
+			{
+				P.Unit = Archetype::BogTitan;
+			}
+		}
+	}
+	std::stable_sort(Pending.begin(), Pending.end(), [](const AIPendingPick& A, const AIPendingPick& B) { return A.Since < B.Since; });
+
+	// Oldest first; an unaffordable pick keeps its gloom, so younger picks wait their turn.
+	int Budget = W.GetTeam(Team::Enemy).Res[0];
+	for (size_t I = 0; I < Pending.size() && Army < Config.ArmyCap;)
+	{
+		const AIPendingPick P = Pending[I];
+		const int Cost = GetDef(P.Unit).CostSunstone;
+		if (Budget < Cost)
+		{
+			break;
+		}
+		if (W.CmdTrain(P.Building, P.Unit))
+		{
+			Budget -= Cost;
+			++Army;
+			Pending.erase(Pending.begin() + static_cast<std::ptrdiff_t>(I));
+			continue;
+		}
+		++I;
+	}
+}
+
+void EnemyAI::MeasurePlayerArmy(const World& W)
+{
+	for (float& S : ArmyShare)
+	{
+		S = 0.f;
+	}
+	float Total = 0.f;
+	for (const Entity& E : W.GetEntities())
+	{
+		if (!E.bAlive || E.Owner != Team::Player || !W.IsCombatUnit(E))
+		{
+			continue;
+		}
+		const float Supply = static_cast<float>(MaxI(1, GetDef(E.Type).SupplyCost));
+		Total += Supply;
+		switch (E.Type)
+		{
+		case Archetype::Shieldbearer:
+			ArmyShare[0] += Supply;
+			break;
+		case Archetype::Ranger:
+			ArmyShare[1] += Supply;
+			break;
+		case Archetype::StagRider:
+			ArmyShare[2] += Supply;
+			break;
+		case Archetype::Sage:
+			ArmyShare[3] += Supply;
+			break;
+		default:
+			break;
+		}
+	}
+	if (Total > 0.f)
+	{
+		for (float& S : ArmyShare)
+		{
+			S /= Total;
+		}
+	}
+}
+
+Archetype EnemyAI::PickCounter(World& W, const Entity& Building) const
+{
+	const ArchetypeDef& D = GetDef(Building.Type);
+	if (W.GetTime() < Config.EliteAfter * GetDifficultyTuning(Diff).EnemyTiming)
+	{
+		return D.Trains[0];
+	}
+	Archetype Options[MaxTrainOptions];
+	float Weights[MaxTrainOptions];
+	int Count = 0;
+	float Sum = 0.f;
+	for (Archetype A : D.Trains)
+	{
+		if (A == Archetype::None || A == Archetype::BogTitan)
+		{
+			continue;
+		}
+		const GloamPickWeights& P = GetGloamPickWeights(A);
+		const float Weight = MaxF(0.1f, P.Base + ArmyShare[0] * P.VsShieldbearer + ArmyShare[1] * P.VsRanger + ArmyShare[2] * P.VsStagRider +
+			ArmyShare[3] * P.VsSage);
+		Options[Count] = A;
+		Weights[Count] = Weight;
+		Sum += Weight;
+		++Count;
+	}
+	if (Count == 0)
+	{
+		return D.Trains[0];
+	}
+	float Roll = W.GetRng().Range(0.f, Sum);
+	for (int I = 0; I < Count; ++I)
+	{
+		Roll -= Weights[I];
+		if (Roll <= 0.f)
+		{
+			return Options[I];
+		}
+	}
+	return Options[Count - 1];
 }
 
 void EnemyAI::Defend(World& W)

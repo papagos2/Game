@@ -98,7 +98,8 @@ std::vector<MissionDef> BuildMissions()
 		M.StartSunstone = 250;
 		M.StartTimber = 200;
 		M.NodeAmount = 1500;
-		M.ParTime = 630.f;
+		// Dawn comes at the same time for everyone, so the second star asks for a clean defence.
+		M.SecondStar = StarGoal::NoBuildingLost;
 		M.Seed = 202;
 
 		ObjectiveDef Beacons;
@@ -151,7 +152,7 @@ std::vector<MissionDef> BuildMissions()
 		M.StartTimber = 200;
 		M.NodeAmount = 1800;
 		M.TaggedArch = Archetype::GloamHeart;
-		M.ParTime = 1500.f;
+		M.ParTime = 1080.f;
 		M.Seed = 303;
 
 		ObjectiveDef Heart;
@@ -457,6 +458,24 @@ bool LoadMissionMap(const MissionDef& M, World& W, std::string& OutError)
 	}
 	W.Events.clear();
 	return true;
+}
+
+std::string StarGoalText(const MissionDef& M, int Index)
+{
+	switch (Index)
+	{
+	case 0:
+		return "Victory";
+	case 1:
+		if (M.SecondStar == StarGoal::NoBuildingLost)
+		{
+			return "Lose no buildings";
+		}
+		return std::string("Finish within ") + std::to_string(static_cast<int>(M.ParTime) / 60) + ":" +
+			(static_cast<int>(M.ParTime) % 60 < 10 ? "0" : "") + std::to_string(static_cast<int>(M.ParTime) % 60);
+	default:
+		return "Keep never below half health";
+	}
 }
 
 bool FindAttackTarget(const World& W, const Vec2& From, Team Attacker, Vec2& OutPos, bool bPreferBeacons)
@@ -896,7 +915,7 @@ void MissionRuntime::Finish(World& W, MissionOutcome Result, const std::string& 
 	if (Result == MissionOutcome::Won)
 	{
 		Stars[0] = true;
-		Stars[1] = Elapsed <= Def().ParTime;
+		Stars[1] = Def().SecondStar == StarGoal::NoBuildingLost ? W.GetTeam(Team::Player).Stats.BuildingsLost == 0 : Elapsed <= Def().ParTime;
 		Stars[2] = KeepMinRatio >= 0.5f;
 		W.EmitSimple(EventType::MissionWon, Team::Player, Vec2(), NoEntity, Archetype::None, Elapsed, GetStarCount());
 	}

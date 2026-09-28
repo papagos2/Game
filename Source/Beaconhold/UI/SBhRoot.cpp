@@ -805,6 +805,16 @@ TSharedRef<SWidget> SBhRoot::BuildBriefing()
 					FSlateColor(O.bOptional ? BhColors::TextDim : BhColors::Text), false, ETextJustify::Left, 900.f)
 			];
 	}
+	TSharedRef<SHorizontalBox> StarGoals = SNew(SHorizontalBox);
+	for (int32 I = 0; I < 3; ++I)
+	{
+		StarGoals->AddSlot()
+			.AutoWidth()
+			.Padding(FMargin(0.f, 0.f, 28.f, 0.f))
+			[
+				BhUi::IconText(Style, bh::Icon::Star, BhUE::ToText(bh::StarGoalText(M, I)), 30.f, 19.f)
+			];
+	}
 	TSharedRef<SWidget> Content = SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight()
 		[
@@ -829,6 +839,14 @@ TSharedRef<SWidget> SBhRoot::BuildBriefing()
 		+ SVerticalBox::Slot().AutoHeight()
 		[
 			Objectives
+		]
+		+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 16.f, 0.f, 6.f))
+		[
+			BhUi::Label(RootText(TEXT("STARS")), 18.f, FSlateColor(BhColors::Gold))
+		]
+		+ SVerticalBox::Slot().AutoHeight()
+		[
+			StarGoals
 		]
 		+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(FMargin(0.f, 26.f, 0.f, 0.f))
 		[

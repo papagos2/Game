@@ -380,6 +380,7 @@ private:
 	void TryHeal(Entity& E);
 	EntityId ScanForTarget(const Entity& E, float Radius) const;
 	EntityId FindEnemyInReach(const Entity& E) const; // closest enemy within attack range
+	EntityId FindOutcropWithRoom(const Entity& Worker, EntityId Exclude, float MaxDist) const;
 	void AssistAllies(const Entity& Victim, EntityId Attacker);
 
 	// Movement

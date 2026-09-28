@@ -2,9 +2,10 @@
 // telemetry reports pacing, economy, unit balance and simulation health for each run, then a
 // one-line-per-run table.
 //
-// Usage: bhplaytest [filter] [--brief]
-//   filter  only runs whose name contains it (e.g. "heart", "dusk/hard", "riders")
-//   --brief only the table
+// Usage: bhplaytest [filter] [--brief] [--seeds N]
+//   filter   only runs whose name contains it (e.g. "heart", "dusk/hard", "riders")
+//   --brief  only the table
+//   --seeds  games per run with different random seeds (default 3; seed 0 is the game's own)
 #include "Bot.h"
 #include "Playtest.h"
 
@@ -13,6 +14,7 @@
 #include "BhSession.h"
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -56,6 +58,12 @@ std::vector<Run> BuildRuns()
 	BotConfig DuskNoTowers = Dusk;
 	DuskNoTowers.bBuildTowers = false;
 	Add("dusk/normal/no-towers", 1, Difficulty::Normal, DuskNoTowers);
+	BotConfig DuskStrong = Dusk;
+	DuskStrong.bSmartEconomy = true;
+	DuskStrong.TowerCount = 5;
+	DuskStrong.Army = BotArmy::Sages;
+	Add("dusk/hard/strong", 1, Difficulty::Hard, DuskStrong);
+	Add("dusk/normal/strong", 1, Difficulty::Normal, DuskStrong);
 
 	BotConfig Heart;
 	Heart.TargetWorkers = 16;
@@ -87,41 +95,44 @@ std::vector<Run> BuildRuns()
 	return Runs;
 }
 
-const char* OutcomeText(MissionOutcome O)
-{
-	return O == MissionOutcome::Won ? "WON" : (O == MissionOutcome::Lost ? "LOST" : "open");
-}
 } // namespace
 
 int main(int Argc, char** Argv)
 {
 	const char* Filter = nullptr;
 	bool bBrief = false;
+	int Seeds = 3;
 	for (int I = 1; I < Argc; ++I)
 	{
 		if (std::strcmp(Argv[I], "--brief") == 0)
 		{
 			bBrief = true;
 		}
+		else if (std::strcmp(Argv[I], "--seeds") == 0 && I + 1 < Argc)
+		{
+			Seeds = std::atoi(Argv[++I]);
+		}
 		else
 		{
 			Filter = Argv[I];
 		}
 	}
+	Seeds = Seeds < 1 ? 1 : Seeds;
 	struct Row
 	{
 		std::string Name;
-		MissionOutcome Outcome;
-		float Time;
-		int Stars;
-		int Lost;
-		int Kills;
-		float Lull;
-		size_t Stuck;
-		size_t Violations;
-		int PeakUnits;
-		float FloatSun;
-		float FloatWood;
+		int Wins = 0;
+		int Losses = 0;
+		int Runs = 0;
+		float TimeSum = 0.f;
+		float TimeMax = 0.f;
+		int StarSum = 0;
+		int LostSum = 0;
+		int KillSum = 0;
+		float LullMax = 0.f;
+		size_t Stuck = 0;
+		size_t Violations = 0;
+		int PeakUnits = 0;
 	};
 	std::vector<Row> Rows;
 	int Failures = 0;
@@ -131,35 +142,54 @@ int main(int Argc, char** Argv)
 		{
 			continue;
 		}
-		Session S;
-		SessionConfig C;
-		C.MissionIndex = R.Mission;
-		C.Diff = R.Diff;
-		C.bTutorial = R.Mission == 0;
-		std::string Err;
-		if (!S.Start(C, Err))
+		Row Rw;
+		Rw.Name = R.Name;
+		for (int Seed = 0; Seed < Seeds; ++Seed)
 		{
-			std::printf("%s: start failed: %s\n", R.Name.c_str(), Err.c_str());
-			++Failures;
-			continue;
+			Session S;
+			SessionConfig C;
+			C.MissionIndex = R.Mission;
+			C.Diff = R.Diff;
+			C.bTutorial = R.Mission == 0;
+			C.Seed = static_cast<uint32_t>(Seed); // 0 is the game's own seed
+			std::string Err;
+			if (!S.Start(C, Err))
+			{
+				std::printf("%s: start failed: %s\n", R.Name.c_str(), Err.c_str());
+				++Failures;
+				continue;
+			}
+			Telemetry T;
+			const BotReport Report = PlayMission(S, R.Bot, R.MaxSeconds, &T);
+			if (!bBrief)
+			{
+				std::printf("== %s (seed %d)\n%s", R.Name.c_str(), Seed, T.Summary().c_str());
+			}
+			Failures += static_cast<int>(T.Violations.size());
+			const TeamState& P = S.GetWorld().GetTeam(Team::Player);
+			++Rw.Runs;
+			Rw.Wins += T.Outcome == MissionOutcome::Won ? 1 : 0;
+			Rw.Losses += T.Outcome == MissionOutcome::Lost ? 1 : 0;
+			Rw.TimeSum += T.Duration;
+			Rw.TimeMax = T.Duration > Rw.TimeMax ? T.Duration : Rw.TimeMax;
+			Rw.StarSum += Report.Stars;
+			Rw.LostSum += P.Stats.UnitsLost;
+			Rw.KillSum += P.Stats.Kills;
+			Rw.LullMax = T.LongestLull > Rw.LullMax ? T.LongestLull : Rw.LullMax;
+			Rw.Stuck += T.Stuck.size();
+			Rw.Violations += T.Violations.size();
+			Rw.PeakUnits = T.PeakPlayerUnits + T.PeakEnemyUnits > Rw.PeakUnits ? T.PeakPlayerUnits + T.PeakEnemyUnits : Rw.PeakUnits;
 		}
-		Telemetry T;
-		const BotReport Report = PlayMission(S, R.Bot, R.MaxSeconds, &T);
-		if (!bBrief)
-		{
-			std::printf("== %s\n%s", R.Name.c_str(), T.Summary().c_str());
-		}
-		Failures += static_cast<int>(T.Violations.size());
-		const TeamState& P = S.GetWorld().GetTeam(Team::Player);
-		Rows.push_back({R.Name, T.Outcome, T.Duration, Report.Stars, P.Stats.UnitsLost, P.Stats.Kills, T.LongestLull, T.Stuck.size(), T.Violations.size(),
-			T.PeakPlayerUnits + T.PeakEnemyUnits, T.AverageFloat(Resource::Sunstone), T.AverageFloat(Resource::Timber)});
+		Rows.push_back(Rw);
 	}
-	std::printf("\n%-34s %-5s %6s %5s %5s %5s %6s %5s %4s %5s %11s\n", "run", "end", "time", "stars", "lost", "kills", "lull", "stuck", "bad", "units",
-		"float s/t");
+	std::printf("\n%-34s %5s %5s %7s %7s %5s %5s %5s %6s %5s %4s %5s\n", "run", "won", "lost", "avg", "max", "stars", "died", "kills", "lull", "stuck", "bad",
+		"units");
 	for (const Row& Rw : Rows)
 	{
-		std::printf("%-34s %-5s %6s %5d %5d %5d %6s %5zu %4zu %5d %5.0f/%-5.0f\n", Rw.Name.c_str(), OutcomeText(Rw.Outcome), FormatTime(Rw.Time).c_str(),
-			Rw.Stars, Rw.Lost, Rw.Kills, FormatTime(Rw.Lull).c_str(), Rw.Stuck, Rw.Violations, Rw.PeakUnits, Rw.FloatSun, Rw.FloatWood);
+		const float N = static_cast<float>(Rw.Runs > 0 ? Rw.Runs : 1);
+		std::printf("%-34s %2d/%-2d %2d/%-2d %7s %7s %5.1f %5.0f %5.0f %6s %5zu %4zu %5d\n", Rw.Name.c_str(), Rw.Wins, Rw.Runs, Rw.Losses, Rw.Runs,
+			FormatTime(Rw.TimeSum / N).c_str(), FormatTime(Rw.TimeMax).c_str(), static_cast<float>(Rw.StarSum) / N, static_cast<float>(Rw.LostSum) / N,
+			static_cast<float>(Rw.KillSum) / N, FormatTime(Rw.LullMax).c_str(), Rw.Stuck, Rw.Violations, Rw.PeakUnits);
 	}
 	return Failures > 0 ? 1 : 0;
 }

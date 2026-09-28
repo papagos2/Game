@@ -9,7 +9,9 @@
 
 namespace bh
 {
-constexpr uint32_t SessionSaveVersion = 1;
+// Bump whenever the saved layout changes; saves of another version are refused (a suspended
+// mission from an older build is dropped, never misread).
+constexpr uint32_t SessionSaveVersion = 2;
 
 // Serializes everything needed to continue the mission exactly where it was.
 void SaveSession(const Session& S, std::vector<uint8_t>& OutBytes);

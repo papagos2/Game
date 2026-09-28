@@ -57,6 +57,7 @@ struct AIConfig
 	int HomeGuard = 4;
 	int ArmyCap = 40;
 	float TitanAfter = -1.f; // seconds; negative disables Bog Titans
+	float EliteAfter = 150.f; // seconds before buildings train anything but their first unit
 };
 
 enum class TutorialCond : uint8_t
@@ -94,6 +95,13 @@ struct TutorialStep
 	const char* Highlight = ""; // UI action id, e.g. "train:Lamplighter", "build", "place:Cottage", "army"
 };
 
+// What the second star asks for (the first is victory, the third a Keep kept above half health).
+enum class StarGoal : uint8_t
+{
+	ParTime,        // win within ParTime
+	NoBuildingLost, // win without losing a building
+};
+
 struct MissionDef
 {
 	const char* Id = "";
@@ -113,8 +121,12 @@ struct MissionDef
 	AIConfig AI;
 	std::vector<TutorialStep> Tutorial;
 	float ParTime = 900.f;
+	StarGoal SecondStar = StarGoal::ParTime;
 	uint32_t Seed = 1;
 };
+
+// Player-facing text of star Index (0..2) of a mission.
+std::string StarGoalText(const MissionDef& M, int Index);
 
 int GetMissionCount();
 const MissionDef& GetMission(int Index);

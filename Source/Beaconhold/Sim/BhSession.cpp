@@ -13,6 +13,10 @@ bool Session::Start(const SessionConfig& InConfig, std::string& OutError)
 		bStarted = false;
 		return false;
 	}
+	if (Config.Seed != 0)
+	{
+		TheWorld.GetRng().SetState(M.Seed ^ (Config.Seed * 2654435761u));
+	}
 	ApplyModifiers();
 	TheWorld.RecomputeSupply();
 	Mission.Start(Config.MissionIndex, Config.Diff, Config.bTutorial, TheWorld);

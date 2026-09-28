@@ -89,7 +89,21 @@ struct BoonDef
 	float PerRank = 0.f;
 };
 
+// How strongly the Gloam commander favours a unit, when a building can train more than one, given
+// the Warden army it faces: Base + the sum over Warden soldier types of (that type's share of
+// the army's supply) x (the weight against it). Counters: Thornbacks break shield walls and
+// cavalry, Gloomlings overrun archers and Sages.
+struct GloamPickWeights
+{
+	float Base = 1.f;
+	float VsShieldbearer = 0.f;
+	float VsRanger = 0.f;
+	float VsStagRider = 0.f;
+	float VsSage = 0.f;
+};
+
 const ArchetypeDef& GetDef(Archetype A);
+const GloamPickWeights& GetGloamPickWeights(Archetype GloamUnit);
 const ResearchDef& GetResearchDef(Research R);
 const AbilityDef& GetAbilityDef(Ability A);
 const BoonDef& GetBoonDef(Boon B);
@@ -112,6 +126,7 @@ struct GatherTuning
 	static constexpr float ChopTime = 3.4f;
 	static constexpr int WoodPerTree = 40;
 	static constexpr int MaxMinersPerNode = 6;
+	static constexpr float RedirectRadius = 12.f; // a full outcrop sends workers to one this close
 	static constexpr float GatherReach = 0.45f; // edge distance to start gathering
 };
 
