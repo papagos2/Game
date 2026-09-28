@@ -11,13 +11,14 @@ const exe = existsSync('/opt/pw-browsers/chromium') ? '/opt/pw-browsers/chromium
 const browser = await chromium.launch({ executablePath: exe, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 
 const classes = process.argv[2] ? [process.argv[2]] : ['stormblade', 'emberseer', 'thornkeeper'];
+const seed = Number(process.argv[3] ?? 12345);
 let failed = false;
 
 for (const cls of classes) {
   const page = await (await browser.newContext({ viewport: { width: 844, height: 390 } })).newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto('http://127.0.0.1:5179/');
+  await page.goto(`http://127.0.0.1:5179/?seed=${seed}`);
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page.getByText('New Hero').click();
@@ -157,7 +158,7 @@ for (const cls of classes) {
       g.update(DT);
       const sig = `${p.level}|${p.xp}|${p.completed.length}|${p.active.map((a) => a.progress).join()}`;
       if (sig !== lastSig) { lastSig = sig; lastProgressAt = g.now; }
-      if (g.now - lastProgressAt > 900) { log.push(`stuck: no progress for 15 minutes; want=${want} engaged=${engaged?.kind}/${engaged?.state} at ${pl.pos.x.toFixed(0)},${pl.pos.z.toFixed(0)}`); break; }
+      if (g.now - lastProgressAt > 900) { log.push(`stuck: no progress for 15 minutes; want=${want} engaged=${engaged?.kind}/${engaged?.state} at ${pl.pos.x.toFixed(0)},${pl.pos.z.toFixed(0)} target=${engaged?.pos.x.toFixed(0)},${engaged?.pos.z.toFixed(0)} distance=${engaged?.distTo(pl).toFixed(1)} hp=${pl.hp.toFixed(0)}/${pl.maxHp.toFixed(0)} enemyHp=${engaged?.hp.toFixed(0)} auto=${g.autoAttack} targetSet=${pl.target === engaged} cooldown=${pl.attackTimer.toFixed(1)}`); break; }
     }
     return { minutes: Math.round(g.now / 60), level: p.level, deaths, bossTries, done: p.completed.includes('cindermaw'), log, gear: Object.values(p.gear).map((i) => i && `${i.name} ilvl${i.ilvl}`) };
   });

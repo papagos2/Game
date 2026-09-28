@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { QUESTS } from '../src/data/quests';
 import {
-  acceptQuest, addXp, completeQuest, newProgress, npcMarker, onItemLooted, onMobKilled, parseSave, questStatus,
+  SAVE_BACKUP_KEY, SAVE_KEY, acceptQuest, addXp, completeQuest, deleteSave, loadGame, newProgress,
+  npcMarker, onItemLooted, onMobKilled, parseSave, questStatus, saveGame,
 } from '../src/game/progress';
 import {
   MAX_LEVEL, itemScore, levelMod, makeItem, makeRng, mitigation, mobStats, mobXp, playerStats, rollMobLoot, xpToNext,
@@ -126,6 +127,27 @@ describe('progress and quests', () => {
     expect(parseSave(JSON.stringify({ ...p, cls: 'hacker' }))).toBeNull();
     expect(parseSave(JSON.stringify({ ...p, completed: ['nope'] }))).toBeNull();
     expect(parseSave(null)).toBeNull();
+  });
+
+  it('recovers the previous valid checkpoint if the active save is damaged', () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => { values.set(key, value); },
+      removeItem: (key: string) => { values.delete(key); },
+    };
+    const p = newProgress('Hero', 'stormblade');
+    expect(saveGame(p, storage)).toBe(true);
+    p.level = 2;
+    expect(saveGame(p, storage)).toBe(true);
+    values.set(SAVE_KEY, '{broken');
+    expect(loadGame(storage)?.level).toBe(1);
+    p.level = 3;
+    expect(saveGame(p, storage)).toBe(true);
+    expect(loadGame(storage)?.level).toBe(3);
+    deleteSave(storage);
+    expect(values.has(SAVE_KEY)).toBe(false);
+    expect(values.has(SAVE_BACKUP_KEY)).toBe(false);
   });
 });
 

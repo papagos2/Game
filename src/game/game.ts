@@ -77,6 +77,10 @@ export class Game {
     private input: Input,
     public quality: Quality,
   ) {
+    if (import.meta.env.DEV) {
+      const seed = new URLSearchParams(location.search).get('seed');
+      if (seed !== null && /^\d+$/.test(seed)) this.rng = makeRng(Number(seed) >>> 0);
+    }
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: quality === 'high', powerPreference: 'high-performance' });
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.camera = new THREE.PerspectiveCamera(60, 1, 0.3, 420);
@@ -1210,7 +1214,9 @@ export class Game {
       this.units.splice(this.units.indexOf(u), 1);
       return;
     }
-    if (u.distToXZ(this.player.pos.x, this.player.pos.z) < 30 && u.kind !== 'boss') {
+    // Avoid visible pop-in, but never let a player camping a cleared area prevent
+    // every quest mob from returning forever. Corpses are hidden after eight seconds.
+    if (u.distToXZ(this.player.pos.x, this.player.pos.z) < 30 && u.kind !== 'boss' && this.now - u.corpseUntil < 60) {
       u.respawnAt = this.now + 5;
       return;
     }

@@ -6,6 +6,7 @@ import { MAX_LEVEL, SLOTS, xpToNext, type Gear, type Item } from './rules';
 
 export const SAVE_VERSION = 1;
 export const SAVE_KEY = 'ashenveil.save.v1';
+export const SAVE_BACKUP_KEY = 'ashenveil.save.v1.backup';
 export const BAG_SIZE = 16;
 
 export interface QuestState { id: string; progress: number; done: boolean }
@@ -183,15 +184,20 @@ export function parseSave(raw: string | null): Progress | null {
 
 export function loadGame(storage: Pick<Storage, 'getItem'> = localStorage): Progress | null {
   try {
-    return parseSave(storage.getItem(SAVE_KEY));
+    return parseSave(storage.getItem(SAVE_KEY)) ?? parseSave(storage.getItem(SAVE_BACKUP_KEY));
   } catch {
     return null;
   }
 }
 
-export function saveGame(p: Progress, storage: Pick<Storage, 'setItem'> = localStorage): boolean {
+export function saveGame(p: Progress, storage: Pick<Storage, 'getItem' | 'setItem'> = localStorage): boolean {
   try {
-    storage.setItem(SAVE_KEY, JSON.stringify(p));
+    const next = JSON.stringify(p);
+    const current = storage.getItem(SAVE_KEY);
+    // Keep the last valid checkpoint before replacing the active save. On a fresh
+    // character, store the same checkpoint twice so the first save is recoverable.
+    storage.setItem(SAVE_BACKUP_KEY, parseSave(current) ? current! : next);
+    storage.setItem(SAVE_KEY, next);
     return true;
   } catch {
     return false;
@@ -201,6 +207,7 @@ export function saveGame(p: Progress, storage: Pick<Storage, 'setItem'> = localS
 export function deleteSave(storage: Pick<Storage, 'removeItem'> = localStorage): void {
   try {
     storage.removeItem(SAVE_KEY);
+    storage.removeItem(SAVE_BACKUP_KEY);
   } catch {
     /* storage unavailable */
   }

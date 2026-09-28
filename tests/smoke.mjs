@@ -4,8 +4,10 @@
 import { chromium } from 'playwright';
 import { createServer } from 'vite';
 import { existsSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const out = new URL('./output/', import.meta.url).pathname;
+const out = fileURLToPath(new URL('./output/', import.meta.url));
 mkdirSync(out, { recursive: true });
 
 const server = await createServer({ server: { port: 5178, host: '127.0.0.1' }, logLevel: 'error' });
@@ -25,7 +27,7 @@ const step = async (name, fn) => {
   await fn();
   console.log('ok');
 };
-const shot = (n) => page.screenshot({ path: `${out}${n}.png` });
+const shot = (n) => page.screenshot({ path: join(out, `${n}.png`) });
 const G = (fn, arg) => page.evaluate(fn, arg);
 
 let failed = false;
