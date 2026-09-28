@@ -22,7 +22,7 @@ export type AbilityId =
 
 export type Glyph =
   | 'sword' | 'bolt' | 'shield' | 'storm' | 'flame' | 'ring' | 'wing' | 'meteor'
-  | 'thorn' | 'leaf' | 'paw' | 'bloom' | 'potion' | 'leap' | 'snow' | 'skull' | 'rune' | 'claw';
+  | 'thorn' | 'leaf' | 'paw' | 'bloom' | 'potion' | 'leap' | 'snow' | 'skull' | 'rune' | 'claw' | 'horse';
 
 /** Who an effect hits. */
 export type Area = 'self' | 'target' | 'aroundSelf' | 'aroundTarget' | 'cone';
@@ -103,6 +103,8 @@ export interface ClassDef {
 }
 
 export const SPEC_LEVEL = 10;
+/** Level at which heroes get their mount. */
+export const MOUNT_LEVEL = 5;
 export const SPEC_SECOND_ABILITY_LEVEL = 16;
 
 const burn = '#ff9a3c';

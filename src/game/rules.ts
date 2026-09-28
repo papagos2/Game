@@ -24,6 +24,8 @@ export interface Item {
   armor: number;
   crit: number;
   value: number;
+  /** Times reforged by crafting. */
+  upg?: number;
 }
 
 export type Gear = Record<GearSlot, Item | null>;
@@ -72,11 +74,12 @@ export interface TalentBonuses {
   ability: Partial<Record<AbilityId, { dmg: number; cd: number; cost: number }>>;
 }
 
-export function talentBonuses(talents: Record<string, number>): TalentBonuses {
+export function talentBonuses(talents: Record<string, number>, extra: Partial<Record<StatMod, number>> = {}): TalentBonuses {
   const stat: Record<StatMod, number> = {
     powerPct: 0, hpPct: 0, armorPct: 0, critPct: 0, regenPct: 0, healPct: 0, dotPct: 0, petPct: 0, drPct: 0, speedPct: 0,
   };
   const ability: TalentBonuses['ability'] = {};
+  for (const [k, v] of Object.entries(extra)) stat[k as StatMod] += v ?? 0;
   for (const [id, rank] of Object.entries(talents)) {
     const entry = NODE_BY_ID[id];
     if (!entry || rank <= 0) continue;
@@ -110,9 +113,9 @@ export interface PlayerStats {
   damageReduction: number;
 }
 
-export function playerStats(cls: ClassId, level: number, gear: Gear, talents: Record<string, number> = {}): PlayerStats {
+export function playerStats(cls: ClassId, level: number, gear: Gear, talents: Record<string, number> = {}, extra: Partial<Record<StatMod, number>> = {}): PlayerStats {
   const def = CLASSES[cls];
-  const tb = talentBonuses(talents).stat;
+  const tb = talentBonuses(talents, extra).stat;
   let stamina = 0;
   let power = level;
   let armor = def.baseArmor + level * 2;

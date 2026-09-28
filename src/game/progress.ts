@@ -6,6 +6,9 @@ import { QUESTS, QUEST_BY_ID, type QuestDef } from '../data/quests';
 import { TIER_POINTS, TREES, NODE_BY_ID } from '../data/talents';
 import { MAPS, MAP_ORDER, type MapId, type MobKind } from '../data/world';
 import { MAX_LEVEL, emptyGear, respecCost, talentPointsTotal, xpToNext, type Gear, type Item, type Rarity } from './rules';
+import { ACHIEVEMENTS, MATERIALS, MAX_GATHER_SKILL, type MaterialId } from '../data/economy';
+import { MOBS } from '../data/world';
+import { STAT_KEYS, defaultExtras, type Bounty, type Buff, type Extras } from './economy';
 
 export const SAVE_VERSION = 2;
 export const SAVE_KEY = 'ashenveil.save.v1';
@@ -14,7 +17,7 @@ export const BAG_SIZE = 24;
 
 export interface QuestState { id: string; progress: number; done: boolean }
 
-export interface Progress {
+export interface Progress extends Extras {
   version: number;
   name: string;
   cls: ClassId;
@@ -40,6 +43,7 @@ export function newProgress(name: string, cls: ClassId): Progress {
     version: SAVE_VERSION, name, cls, spec: null, level: 1, xp: 0, gold: 5, potions: 3,
     gear: emptyGear(), bag: [], talents: {}, active: [], completed: [],
     mapId: 'vale', unlocked: ['vale'], pos: { ...MAPS.vale.spawn }, vendorBought: [], playSeconds: 0,
+    ...defaultExtras(),
   };
 }
 
@@ -231,10 +235,35 @@ function validItem(it: unknown): it is Item {
 }
 
 function cleanItem(o: Item): Item {
-  return {
+  const it: Item = {
     id: o.id, name: String(o.name).slice(0, 60), type: o.type, ilvl: o.ilvl, rarity: o.rarity as Rarity,
     power: o.power, stamina: o.stamina, armor: o.armor, crit: o.crit, value: o.value,
   };
+  if (isNum(o.upg) && o.upg > 0) it.upg = Math.min(10, Math.floor(o.upg));
+  return it;
+}
+
+/** Reads the optional progression extras (added after save v2 shipped), keeping only valid values. */
+function parseExtras(d: Record<string, unknown>): Extras {
+  const e = defaultExtras();
+  const mats = d.materials as Record<string, unknown> | undefined;
+  if (mats && typeof mats === 'object') for (const [k, v] of Object.entries(mats)) if (k in MATERIALS && isNum(v) && v > 0) e.materials[k as MaterialId] = Math.floor(v);
+  if (isNum(d.gatherSkill)) e.gatherSkill = Math.max(1, Math.min(MAX_GATHER_SKILL, Math.floor(d.gatherSkill)));
+  if (Array.isArray(d.buffs)) e.buffs = (d.buffs as Buff[]).filter((b) => b && (b.id === 'might' || b.id === 'stone') && isNum(b.until)).map((b) => ({ id: b.id, until: b.until }));
+  const rep = d.rep as Record<string, unknown> | undefined;
+  if (rep && typeof rep === 'object') for (const [k, v] of Object.entries(rep)) if (k in MAPS && isNum(v) && v >= 0) e.rep[k as MapId] = Math.min(20000, v);
+  if (Array.isArray(d.achievements)) e.achievements = (d.achievements as unknown[]).filter((a): a is string => typeof a === 'string' && ACHIEVEMENTS.some((x) => x.id === a));
+  if (typeof d.title === 'string' && ACHIEVEMENTS.some((a) => a.title === d.title && e.achievements.includes(a.id))) e.title = d.title;
+  const st = d.stats as Record<string, unknown> | undefined;
+  if (st && typeof st === 'object') for (const k of STAT_KEYS) if (isNum(st[k]) && st[k] >= 0) e.stats[k] = Math.floor(st[k] as number);
+  const b = d.bounties as { day?: unknown; list?: unknown } | undefined;
+  if (b && typeof b.day === 'string' && Array.isArray(b.list)) {
+    const list = (b.list as Bounty[]).filter((x) => x && typeof x.id === 'string' && x.map in MAPS && (x.kind === 'kill' || x.kind === 'gather')
+      && isNum(x.count) && isNum(x.progress) && typeof x.claimed === 'boolean' && (x.mob === null || (typeof x.mob === 'string' && x.mob in MOBS)));
+    e.bounties = { day: b.day.slice(0, 12), list: list.slice(0, 12).map((x) => ({ id: x.id, map: x.map, kind: x.kind, mob: x.mob, count: x.count, progress: Math.min(x.count, x.progress), claimed: x.claimed })) };
+  }
+  if (Array.isArray(d.dungeons)) e.dungeons = (d.dungeons as unknown[]).filter((x): x is string => typeof x === 'string').slice(0, 20);
+  return e;
 }
 
 /** Converts a version 1 save (3 gear slots, one map) to the current format. */
@@ -321,6 +350,7 @@ export function parseSave(raw: string | null): Progress | null {
     pos: { x: pos.x, z: pos.z },
     vendorBought: Array.isArray(d.vendorBought) ? (d.vendorBought as unknown[]).filter((x): x is string => typeof x === 'string').slice(-200) : [],
     playSeconds: d.playSeconds,
+    ...parseExtras(d),
   };
   if (!p.unlocked.includes(p.mapId)) p.mapId = 'vale';
   // Talents spent beyond what the level allows (e.g. an edited save) are refunded.

@@ -1,16 +1,19 @@
 // The running game on one map: world, units, combat, enemy AI, companions, camera and saving.
 import * as THREE from 'three';
-import { ABILITIES, CLASSES, POTION, SPEC_LEVEL, SPECS, abilitiesFor, potionPrice, type AbilityDef, type AbilityId, type PetKind, type SpecId } from '../data/classes';
+import { ABILITIES, CLASSES, MOUNT_LEVEL, POTION, SPEC_LEVEL, SPECS, abilitiesFor, potionPrice, type AbilityDef, type AbilityId, type PetKind, type SpecId } from '../data/classes';
 import { FINAL_QUEST, QUEST_BY_ID, QUEST_ITEMS } from '../data/quests';
-import { MAPS, MOBS, WORLD_LIMIT, type MapDef, type MapId, type MobKind, type NpcDef } from '../data/world';
+import { MAPS, MOBS, WORLD_LIMIT, type MapDef, type MapId, type MobKind, type NpcDef, type WorldId } from '../data/world';
+import { COMPANIONS, worldDef, type Role } from '../data/dungeons';
 import { abilityCooldown, angleDiff, castAbility, lerpAngle } from './abilities';
+import { FACTIONS, MAP_MATERIALS, MATERIALS, NODE_RESPAWN, NODES_PER_MATERIAL, REP_PER_BOUNTY, REP_PER_DUNGEON, REP_PER_KILL, REP_PER_QUEST, type MaterialId } from '../data/economy';
+import { activeBuffs, addRep, buffMods, bump, canGather, checkAchievements, gather, onBountyGather, onBountyKill, refreshBounties, repRank } from './economy';
 import { play } from './audio';
-import { animateRig, buildMobModel, buildNpcModel, buildPet, buildPlayerModel, flashRig } from './models';
+import { animateRig, buildCompanion, buildMobModel, buildMount, buildNode, buildNpcModel, buildPet, buildPlayerModel, flashRig, type Rig } from './models';
 import {
-  BAG_SIZE, addXp, chooseSpec, completeQuest, onItemLooted, onMobKilled, onZoneEntered, respec, saveGame, wantsQuestItem, type Progress,
+  BAG_SIZE, addXp, chooseSpec, completeQuest, npcMarker, onItemLooted, onMobKilled, onZoneEntered, respec, saveGame, wantsQuestItem, type Progress,
 } from './progress';
 import {
-  GREY, MAX_LEVEL, levelColor, levelMod, makeItem, makeRng, mitigation, mobStats, mobXp, playerStats, rollMobLoot, slotFor,
+  GREY, MAX_LEVEL, hashString, levelColor, xpToNext, levelMod, makeItem, makeRng, mitigation, mobStats, mobXp, playerStats, rollMobLoot, slotFor,
   resourceMax, resourceRegen, talentBonuses, vendorStock, RARITY_COLORS, type Item, type PlayerStats, type Rng, type TalentBonuses,
 } from './rules';
 import { ColliderGrid, buildWorld, type WorldScene } from './scene';
@@ -28,6 +31,7 @@ export interface GameUI {
   playerDied(): void;
   /** A map's final quest was handed in. */
   actComplete(map: MapDef, unlocked: MapId | null): void;
+  dungeonComplete(map: MapDef, firstClear: boolean): void;
   victory(): void;
   specReady(): void;
 }
@@ -39,6 +43,7 @@ interface Telegraph { x: number; z: number; r: number; t0: number; at: number; m
 export type Quality = 'high' | 'low';
 
 const PLAYER_SPEED = 7.5;
+const MOUNT_SPEED = 1.7;
 const TMP = new THREE.Vector3();
 
 export class Game {
@@ -66,6 +71,10 @@ export class Game {
   zoneId = '';
   rng: Rng = makeRng(Date.now() & 0xffffff);
   leap: { from: THREE.Vector3; to: THREE.Vector3; t: number; land: () => void } | null = null;
+  mounted = false;
+  private mountRig: Rig | null = null;
+  /** Auto-travel ("go to objective") state. */
+  autoPath: { x: number; z: number; npcId: string | null; arrive: number; label: string; checkAt: number; lastX: number; lastZ: number; detour: number; detourUntil: number } | null = null;
   private projectiles: Projectile[] = [];
   private effects: Effect[] = [];
   private telegraphs: Telegraph[] = [];
@@ -79,6 +88,8 @@ export class Game {
   private lastT = 0;
   private disposed = false;
   private playerSpec: SpecId | null;
+  nodes: { mat: MaterialId; x: number; z: number; mesh: THREE.Object3D; readyAt: number }[] = [];
+  private buffCount = 0;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -86,12 +97,13 @@ export class Game {
     public progress: Progress,
     private input: Input,
     public quality: Quality,
+    worldId?: WorldId,
   ) {
     if (import.meta.env.DEV) {
       const seed = new URLSearchParams(location.search).get('seed');
       if (seed !== null && /^\d+$/.test(seed)) this.rng = makeRng(Number(seed) >>> 0);
     }
-    this.map = MAPS[progress.mapId];
+    this.map = worldDef(worldId ?? progress.mapId);
     const theme = this.map.theme;
     this.fogDefault = new THREE.Color(theme.fog);
     this.fogHazard = new THREE.Color(theme.hazard?.fog ?? theme.fog);
@@ -134,6 +146,9 @@ export class Game {
 
     this.spawnNpcs();
     this.spawnMobs();
+    if (!this.map.dungeon) this.spawnNodes();
+    else this.spawnParty();
+    refreshBounties(progress);
     this.resize();
     window.addEventListener('resize', this.resize);
   }
@@ -245,8 +260,10 @@ export class Game {
   recomputeStats() {
     const p = this.progress;
     const before = this.stats?.maxHp ?? 0;
-    this.tb = talentBonuses(p.talents);
-    this.stats = playerStats(p.cls, p.level, p.gear, p.talents);
+    const extra = buffMods(p);
+    this.buffCount = activeBuffs(p).length;
+    this.tb = talentBonuses(p.talents, extra);
+    this.stats = playerStats(p.cls, p.level, p.gear, p.talents, extra);
     this.player.level = p.level;
     this.player.maxHp = this.stats.maxHp;
     this.player.armor = this.stats.armor;
@@ -320,12 +337,16 @@ export class Game {
     this.updateTelegraphs();
     this.updateEffects();
     this.updateEnvironment();
+    if (activeBuffs(this.progress).length !== this.buffCount) this.recomputeStats();
+    for (const n of this.nodes) n.mesh.visible = this.now >= n.readyAt;
     if (this.now - this.lastSave > 15) this.save();
   }
 
   save() {
     this.lastSave = this.now;
-    this.progress.pos = this.player.dead ? { ...this.map.spawn } : { x: this.player.pos.x, z: this.player.pos.z };
+    // Dungeons are instances: a saved game resumes outside, in the act's hub.
+    if (this.map.dungeon) this.progress.pos = { ...MAPS[this.map.act].spawn };
+    else this.progress.pos = this.player.dead ? { ...this.map.spawn } : { x: this.player.pos.x, z: this.player.pos.z };
     saveGame(this.progress);
   }
 
@@ -435,17 +456,29 @@ export class Game {
       return;
     }
 
+    // Being hit or hitting something throws you off your mount and stops auto-travel.
+    if (this.now - pl.lastCombatAt < 0.5) {
+      if (this.mounted) this.dismount();
+      if (this.autoPath) {
+        this.autoPath = null;
+        this.ui.message('Auto-travel stopped: you are in combat');
+      }
+    }
     const mv = this.input.moveVector();
     const moving = Math.hypot(mv.x, mv.y);
+    const speedMul = (pl.slowed(this.now) ? 0.6 : 1) * (this.mounted ? MOUNT_SPEED : 1);
     if (moving > 0.01 && !pl.rooted(this.now)) {
+      this.autoPath = null;
       const s = Math.sin(this.cam.yaw);
       const c = Math.cos(this.cam.yaw);
       const dx = -s * mv.y + c * mv.x;
       const dz = -c * mv.y - s * mv.x;
-      const speed = PLAYER_SPEED * Math.min(1, moving) * (pl.slowed(this.now) ? 0.6 : 1);
+      const speed = PLAYER_SPEED * Math.min(1, moving) * speedMul;
       this.moveUnit(pl, dx * speed * dt, dz * speed * dt);
       pl.facing = lerpAngle(pl.facing, Math.atan2(dx, dz), Math.min(1, dt * 14));
       pl.moving = Math.min(1, moving);
+    } else if (this.autoPath && !pl.rooted(this.now)) {
+      pl.moving = this.stepAutoPath(dt, PLAYER_SPEED * speedMul);
     } else {
       pl.moving = 0;
     }
@@ -483,7 +516,15 @@ export class Game {
 
     pl.rig.root.position.copy(pl.pos);
     pl.rig.root.rotation.y = pl.facing;
-    animateRig(pl.rig, dt, pl.moving, pl.attackAnim, false);
+    if (this.mounted && this.mountRig) {
+      this.mountRig.root.position.copy(pl.pos);
+      this.mountRig.root.rotation.y = pl.facing;
+      animateRig(this.mountRig, dt, pl.moving, -1, false);
+      pl.rig.root.position.y += 1.25;
+      animateRig(pl.rig, dt, 0, pl.attackAnim, false);
+    } else {
+      animateRig(pl.rig, dt, pl.moving, pl.attackAnim, false);
+    }
 
     const zone = this.terrain.zoneAt(pl.pos.x, pl.pos.z);
     const zn = zone?.name ?? this.map.name;
@@ -538,6 +579,121 @@ export class Game {
 
   cooldownTotal(id: AbilityId): number {
     return abilityCooldown(this, id);
+  }
+
+  // ---------- Mount and auto-travel ----------
+
+  canMount() {
+    return this.progress.level >= MOUNT_LEVEL;
+  }
+
+  mount(): boolean {
+    const pl = this.player;
+    if (this.mounted || pl.dead) return false;
+    if (!this.canMount()) return this.fail(`You can ride from level ${MOUNT_LEVEL}`), false;
+    if (this.now - pl.lastCombatAt < 3) return this.fail('Cannot mount in combat'), false;
+    this.mountRig = buildMount(this.progress.cls);
+    this.scene.add(this.mountRig.root);
+    this.mounted = true;
+    play('click');
+    return true;
+  }
+
+  dismount() {
+    if (!this.mounted) return;
+    this.mounted = false;
+    if (this.mountRig) this.scene.remove(this.mountRig.root);
+    this.mountRig = null;
+  }
+
+  toggleMount() {
+    if (this.mounted) this.dismount();
+    else this.mount();
+  }
+
+  /** Where to go for a quest right now: its NPC when done, else the area of the objective. */
+  questDestination(id: string): { x: number; z: number; npcId: string | null; arrive: number; label: string } | null {
+    const st = this.progress.active.find((a) => a.id === id);
+    const q = QUEST_BY_ID[id];
+    if (!st || !q || q.map !== this.map.id) return null;
+    if (st.done) {
+      const n = this.npcs.find((u) => u.npc!.id === (q.turnIn ?? q.giver));
+      return n ? { x: n.pos.x, z: n.pos.z, npcId: n.npc!.id, arrive: 3.5, label: n.name } : null;
+    }
+    const o = q.objective;
+    if (o.type === 'explore') {
+      const zn = this.map.zones.find((z) => z.id === o.zone);
+      return zn ? { x: zn.x, z: zn.z, npcId: null, arrive: zn.radius * 0.4, label: zn.name } : null;
+    }
+    const kind = o.type === 'kill' ? o.mob : Object.values(MOBS).find((m) => m.questDrop?.item === o.item)?.kind;
+    let best: { x: number; z: number; npcId: null; arrive: number; label: string } | null = null;
+    let bd = Infinity;
+    for (const c of this.map.camps) {
+      if (c.kind !== kind) continue;
+      const d = this.player.distToXZ(c.x, c.z);
+      if (d < bd) {
+        bd = d;
+        best = { x: c.x, z: c.z, npcId: null, arrive: Math.max(10, c.spread * 0.8), label: MOBS[c.kind].name };
+      }
+    }
+    return best;
+  }
+
+  /** Auto-travel to a quest objective (or the nearest NPC with a quest for you when id is null). */
+  travelTo(id: string | null): boolean {
+    let dest = id ? this.questDestination(id) : null;
+    if (!id) {
+      const n = this.npcs
+        .filter((u) => npcMarker(this.progress, u.npc!.id))
+        .sort((a, b) => a.distTo(this.player) - b.distTo(this.player))[0];
+      if (n) dest = { x: n.pos.x, z: n.pos.z, npcId: n.npc!.id, arrive: 3.5, label: n.name };
+    }
+    if (!dest) return this.fail('Nowhere to go for that'), false;
+    if (this.player.distToXZ(dest.x, dest.z) <= dest.arrive) {
+      if (dest.npcId) this.openNpc(dest.npcId);
+      return true;
+    }
+    this.autoPath = { ...dest, checkAt: this.now + 1, lastX: this.player.pos.x, lastZ: this.player.pos.z, detour: 0, detourUntil: 0 };
+    this.autoAttack = false;
+    if (!this.mounted && this.canMount() && this.now - this.player.lastCombatAt > 3) this.mount();
+    this.ui.message(`Travelling to ${dest.label}`);
+    return true;
+  }
+
+  private openNpc(id: string) {
+    const n = this.npcs.find((u) => u.npc!.id === id);
+    if (n) this.ui.openDialog(n.npc!);
+  }
+
+  private stepAutoPath(dt: number, speed: number): number {
+    const ap = this.autoPath!;
+    const pl = this.player;
+    const dx = ap.x - pl.pos.x;
+    const dz = ap.z - pl.pos.z;
+    const d = Math.hypot(dx, dz);
+    if (d <= ap.arrive) {
+      this.autoPath = null;
+      if (ap.npcId) {
+        this.dismount();
+        this.openNpc(ap.npcId);
+      } else this.ui.message(`Arrived: ${ap.label}`);
+      return 0;
+    }
+    // If we barely moved in the last second, walk around the obstacle for a moment.
+    if (this.now >= ap.checkAt) {
+      if (Math.hypot(pl.pos.x - ap.lastX, pl.pos.z - ap.lastZ) < speed * 0.25) {
+        ap.detour = (this.rng() < 0.5 ? -1 : 1) * (0.9 + this.rng() * 0.6);
+        ap.detourUntil = this.now + 1.2;
+      }
+      ap.checkAt = this.now + 1;
+      ap.lastX = pl.pos.x;
+      ap.lastZ = pl.pos.z;
+    }
+    const ang = Math.atan2(dx, dz) + (this.now < ap.detourUntil ? ap.detour : 0);
+    const step = Math.min(d, speed * dt);
+    this.moveUnit(pl, Math.sin(ang) * step, Math.cos(ang) * step);
+    pl.facing = lerpAngle(pl.facing, ang, Math.min(1, dt * 10));
+    return 1;
   }
 
   mainAction() {
@@ -610,6 +766,25 @@ export class Game {
   tryInteract() {
     const n = this.nearestNpc(6);
     if (n) this.ui.openDialog(n.npc!);
+    else this.gatherNearest();
+  }
+
+  /** Hands in a finished daily bounty for experience, gold and reputation. */
+  claimBounty(id: string): boolean {
+    const p = this.progress;
+    const b = p.bounties.list.find((x) => x.id === id);
+    if (!b || b.claimed || b.progress < b.count) return false;
+    b.claimed = true;
+    const lvl = p.level;
+    p.gold += lvl * 8;
+    this.gainXp(Math.round(xpToNext(Math.min(lvl, MAX_LEVEL - 1)) * 0.15));
+    this.gainRep(REP_PER_BOUNTY, b.map);
+    bump(p, 'bounties');
+    this.checkAchievements();
+    play('quest');
+    this.ui.toast(`Bounty complete: <span class="gold">+${lvl * 8} gold</span>`);
+    this.save();
+    return true;
   }
 
   usePotion() {
@@ -637,7 +812,12 @@ export class Game {
   }
 
   useAbility(id: AbilityId): boolean {
-    return castAbility(this, id);
+    const ok = castAbility(this, id);
+    if (ok) {
+      this.dismount();
+      this.autoPath = null;
+    }
+    return ok;
   }
 
   enemiesNear(x: number, z: number, r: number): Unit[] {
@@ -674,6 +854,7 @@ export class Game {
   }
 
   private updatePet(w: Unit, dt: number) {
+    if (w.role) return this.updateCompanion(w, dt);
     const pl = this.player;
     if (w.dead || this.now > w.expiresAt || pl.dead) {
       this.ringEffect(w.pos, 2, '#9fe8ff', 0.4);
@@ -853,7 +1034,11 @@ export class Game {
     for (const o of this.units) if (o.target === u) o.target = null;
     if (!u.taggedByPlayer || def.summon) return;
     const p = this.progress;
+    bump(p, 'kills');
+    if (def.elite) bump(p, def.boss ? 'bosses' : 'eliteKills');
+    onBountyKill(p, this.map.act, u.kind as MobKind);
     const xp = mobXp(u.level, p.level, u.elite);
+    if (xp > 0) this.gainRep(REP_PER_KILL * (def.elite ? 10 : 1));
     if (xp > 0) {
       this.ui.floatText(this.player.pos.clone().setY(this.player.pos.y + 3), `+${xp} XP`, '#c28bff', 'small');
       this.gainXp(xp);
@@ -870,7 +1055,21 @@ export class Game {
       this.ui.questsChanged();
     }
     if (onMobKilled(p, u.kind as MobKind).length) this.ui.questsChanged();
-    if (def.boss) {
+    this.checkAchievements();
+    if (this.map.dungeon && u.kind === this.map.dungeon.finalBoss) {
+      for (const o of this.units) if (o.def?.summon && !o.dead) this.kill(o, killer);
+      const first = !p.dungeons.includes(this.map.id);
+      if (first) {
+        p.dungeons.push(this.map.id);
+        this.gainXp(Math.round(xpToNext(Math.min(p.level, MAX_LEVEL - 1)) * 0.5));
+      }
+      bump(p, 'dungeons');
+      this.gainRep(REP_PER_DUNGEON);
+      this.checkAchievements();
+      play('quest');
+      this.save();
+      this.ui.dungeonComplete(this.map, first);
+    } else if (def.boss) {
       for (const o of this.units) if (o.def?.summon && !o.dead) this.kill(o, killer);
       const giver = this.map.npcs[0];
       this.ui.banner(`${def.boss.title} has fallen!`, `Return to ${giver.name} in ${this.map.zones[0].name}`);
@@ -908,6 +1107,7 @@ export class Game {
       return;
     }
     p.bag.push(item);
+    if (item.rarity === 4) bump(p, 'legendaries');
     this.ui.toast(`<span style="color:${RARITY_COLORS[item.rarity]}">[${item.name}]</span>`);
     play('loot');
   }
@@ -935,8 +1135,13 @@ export class Game {
     play('loot');
   }
 
+  /** Vendor discount from reputation with this map's faction. */
+  get discount() {
+    return repRank(this.progress.rep[this.map.act] ?? 0).discount;
+  }
+
   potionPrice() {
-    return potionPrice(this.progress.level);
+    return Math.max(1, Math.round(potionPrice(this.progress.level) * (1 - this.discount)));
   }
 
   buyPotion(): boolean {
@@ -951,7 +1156,15 @@ export class Game {
 
   vendorItems() {
     const p = this.progress;
-    return vendorStock(this.map.id, p.level, p.cls).filter((v) => !p.vendorBought.includes(v.item.id));
+    const stock = vendorStock(this.map.id, p.level, p.cls).map((v) => ({ ...v, price: Math.round(v.price * (1 - this.discount)) }));
+    // Revered with the local faction unlocks an epic piece at the top level of this land.
+    if (repRank(p.rep[this.map.act] ?? 0).index >= 3) {
+      const it = makeItem(makeRng(hashString(`${this.map.id}:faction:${p.cls}`)), p.cls, this.map.levels[1], 3);
+      it.id = `v:${this.map.id}:faction`;
+      it.name = `${FACTIONS[this.map.act].name.split(' ').pop()} ${it.name.split(' ').slice(1).join(' ')}`;
+      stock.push({ item: it, price: Math.round(it.value * 8 * (1 - this.discount)) });
+    }
+    return stock.filter((v) => !p.vendorBought.includes(v.item.id));
   }
 
   buyItem(id: string): boolean {
@@ -984,6 +1197,201 @@ export class Game {
     return true;
   }
 
+  gainRep(amount: number, map: MapId = this.map.act) {
+    const up = addRep(this.progress, map, amount);
+    if (up) {
+      this.ui.banner(up, FACTIONS[map].name);
+      play('quest');
+    }
+  }
+
+  checkAchievements() {
+    for (const a of checkAchievements(this.progress)) {
+      this.ui.toast(`<span style="color:#ffd84a">Achievement: ${a.name}</span>${a.title ? ` - new title "${a.title}"` : ''}`);
+      play('levelup');
+    }
+  }
+
+  // ---------- Dungeon party ----------
+
+  /** The hero's own role, from the chosen path. */
+  playerRole(): Role {
+    const sp = this.progress.spec;
+    if (sp === 'bulwark') return 'tank';
+    if (sp === 'grovewarden') return 'healer';
+    return 'dps';
+  }
+
+  private spawnParty() {
+    const mine = this.playerRole();
+    const roles: Role[] = mine === 'tank' ? ['healer', 'dps'] : mine === 'healer' ? ['tank', 'dps'] : ['tank', 'healer'];
+    const pl = this.player;
+    roles.forEach((role, i) => {
+      const c = COMPANIONS[role];
+      const u = new Unit(c.name, 'player', this.progress.level, 'pet', buildCompanion(role, c.color));
+      u.role = role;
+      u.expiresAt = Infinity;
+      u.speed = 8.5;
+      this.scaleCompanion(u);
+      this.placeUnit(u, pl.pos.x + (i ? 3 : -3), pl.pos.z + 3);
+      this.scene.add(u.rig.root);
+      this.pets.push(u);
+    });
+  }
+
+  private scaleCompanion(u: Unit) {
+    const s = this.stats.damageScale;
+    const hp = this.stats.maxHp;
+    u.level = this.progress.level;
+    u.maxHp = Math.round(hp * (u.role === 'tank' ? 1.7 : 0.95));
+    u.hp = Math.min(u.hp || u.maxHp, u.maxHp);
+    u.armor = this.stats.armor * (u.role === 'tank' ? 2.2 : 1);
+    u.damage = (u.role === 'dps' ? 13 : u.role === 'tank' ? 8 : 4) * s;
+    u.attackSpeed = u.role === 'dps' ? 1.6 : u.role === 'tank' ? 1.8 : 2.2;
+    u.attackRange = u.role === 'tank' ? 2.8 : 20;
+  }
+
+  private reviveCompanion(c: Unit, frac: number, place = false) {
+    this.scaleCompanion(c);
+    c.dead = false;
+    c.state = 'idle';
+    c.hp = Math.round(c.maxHp * frac);
+    c.rig.deathT = 0;
+    c.dots = [];
+    c.stunUntil = c.rootUntil = c.slowUntil = 0;
+    c.rig.root.visible = true;
+    if (place) this.placeUnit(c, this.player.pos.x + (c.role === 'tank' ? -3 : 3), this.player.pos.z + 3);
+  }
+
+  private updateCompanion(w: Unit, dt: number) {
+    const pl = this.player;
+    const party = [pl, ...this.pets.filter((p) => p.role && !p.dead)];
+    if (w.dead) {
+      animateRig(w.rig, dt, 0, -1, true);
+      if (!w.reviveAt) w.reviveAt = this.now + 12;
+      // Back on their feet once the fight is over.
+      if (this.now > w.reviveAt && this.now - pl.lastCombatAt > 6 && !pl.dead) {
+        w.reviveAt = 0;
+        this.reviveCompanion(w, 0.6);
+        this.ui.message(`${w.name} is back on their feet`);
+      }
+      return;
+    }
+    if (w.attackAnim >= 0) {
+      w.attackAnim += dt / 0.45;
+      if (w.attackAnim > 1) w.attackAnim = -1;
+    }
+    w.attackTimer -= dt;
+    // Enemies fighting the party.
+    const foes = this.units.filter((u) => !u.dead && u.state === 'chase' && u.target && (u.target === pl || this.pets.includes(u.target)) && u.distTo(pl) < 45);
+    let t: Unit | null = null;
+    if (w.role === 'tank') {
+      t = foes.find((u) => u.target !== w) ?? foes[0] ?? (pl.target && !pl.target.dead && pl.target.isHostileTo(pl) && this.autoAttack ? pl.target : null);
+      // Taunt: pull everything hitting the others onto the shield.
+      if (this.now > w.castAt && foes.some((u) => u.target !== w)) {
+        w.castAt = this.now + 5;
+        for (const u of foes) if (u.distTo(w) < 14) u.target = w;
+        this.ringEffect(w.pos, 3, '#bfe3ff', 0.4);
+        this.ui.floatText(w.pos.clone().setY(w.pos.y + 3), 'Taunt', '#bfe3ff', 'small');
+      }
+    } else {
+      t = (pl.target && !pl.target.dead && pl.target.isHostileTo(pl) && (this.autoAttack || foes.includes(pl.target)) ? pl.target : null) ?? foes[0] ?? null;
+    }
+    // The healer heals whoever is hurt most.
+    if (w.role === 'healer' && this.now > w.castAt) {
+      const hurt = party.filter((u) => u.hp < u.maxHp * 0.9 && u.distTo(w) < 30).sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0];
+      if (hurt) {
+        w.castAt = this.now + 2.1;
+        w.attackAnim = 0;
+        this.heal(hurt, hurt.maxHp * 0.13 + 10 * this.stats.damageScale, true);
+        this.ringEffect(hurt.pos, 1.6, '#fff4b0', 0.4);
+        play('heal');
+        t = null;
+      }
+    }
+    if (w.role === 'dps' && t && this.now > w.castAt && w.distTo(t) < 22) {
+      w.castAt = this.now + 8;
+      const tgt = t;
+      this.fireProjectile(w, tgt, '#b6e27a', 30, () => this.dealDamage(w, tgt, w.damage * 2.4, { color: '#b6e27a' }), 0.45);
+    }
+    let moving = 0;
+    if (t) {
+      const reach = w.attackRange + t.radius;
+      if (w.distTo(t) > reach) moving = this.stepToward(w, t.pos.x, t.pos.z, w.speed * dt);
+      else if (w.attackTimer <= 0) {
+        w.attackTimer = w.attackSpeed;
+        w.attackAnim = 0;
+        const tgt = t;
+        const dmg = w.damage * (0.9 + this.rng() * 0.2);
+        if (w.role === 'tank') this.dealDamage(w, tgt, dmg, { color: '#bfe3ff' });
+        else this.fireProjectile(w, tgt, w.role === 'healer' ? '#fff4b0' : '#b6e27a', 28, () => this.dealDamage(w, tgt, dmg, { color: '#fff' }));
+      }
+      if (moving === 0) w.facing = Math.atan2(t.pos.x - w.pos.x, t.pos.z - w.pos.z);
+    } else {
+      const off = w.role === 'tank' ? -0.6 : w.role === 'healer' ? 2.6 : -2.6;
+      const back = w.role === 'tank' ? -3.5 : 4;
+      const fx = pl.pos.x + Math.sin(pl.facing + off) * back;
+      const fz = pl.pos.z + Math.cos(pl.facing + off) * back;
+      const d = w.distToXZ(fx, fz);
+      if (d > 30) this.placeUnit(w, fx, fz);
+      else if (d > 1.5) moving = this.stepToward(w, fx, fz, Math.max(PLAYER_SPEED * (this.mounted ? MOUNT_SPEED : 1), d * 2) * dt);
+    }
+    w.rig.root.position.copy(w.pos);
+    w.rig.root.rotation.y = w.facing;
+    animateRig(w.rig, dt, moving, w.attackAnim, false);
+  }
+
+  // ---------- Gathering ----------
+
+  private spawnNodes() {
+    const rng = makeRng(hashString(`${this.map.id}:nodes`));
+    const zones = this.map.zones.slice(1).filter((z) => !MOBS[this.map.camps.find((c) => Math.hypot(c.x - z.x, c.z - z.z) < 5)?.kind ?? 'wolf']?.boss);
+    for (const mat of MAP_MATERIALS[this.map.act]) {
+      const def = MATERIALS[mat];
+      for (let i = 0; i < NODES_PER_MATERIAL; i++) {
+        const zn = zones[i % zones.length];
+        const a = rng() * Math.PI * 2;
+        const r = zn.radius * (0.3 + rng() * 0.6);
+        const p = this.grid.resolve(zn.x + Math.cos(a) * r, zn.z + Math.sin(a) * r, 1.2);
+        const mesh = buildNode(def.kind, def.color);
+        mesh.position.set(p.x, this.heightAt(p.x, p.z), p.z);
+        this.scene.add(mesh);
+        this.nodes.push({ mat, x: p.x, z: p.z, mesh, readyAt: 0 });
+      }
+    }
+  }
+
+  nearestNode(range = 4) {
+    let best: (typeof this.nodes)[number] | null = null;
+    let bd = range;
+    for (const n of this.nodes) {
+      if (this.now < n.readyAt) continue;
+      const d = this.player.distToXZ(n.x, n.z);
+      if (d < bd) {
+        bd = d;
+        best = n;
+      }
+    }
+    return best;
+  }
+
+  gatherNearest(): boolean {
+    const n = this.nearestNode();
+    if (!n || this.player.dead) return false;
+    const def = MATERIALS[n.mat];
+    if (!canGather(this.progress, n.mat)) return this.fail(`Needs gathering skill ${def.skill}`), false;
+    const got = gather(this.progress, n.mat, this.rng());
+    n.readyAt = this.now + NODE_RESPAWN;
+    this.dismount();
+    onBountyGather(this.progress, this.map.act, got);
+    this.ui.floatText(this.player.pos.clone().setY(this.player.pos.y + 3), `+${got} ${def.name}`, def.color, 'small');
+    this.sparkles(def.color);
+    play('loot');
+    this.checkAchievements();
+    this.ui.questsChanged();
+    return true;
+  }
+
   talentsChanged() {
     this.recomputeStats();
     this.save();
@@ -999,6 +1407,9 @@ export class Game {
       this.giveItem(makeItem(this.rng, this.progress.cls, q.rewardItemLevel, q.rewardRarity ?? 1));
     }
     this.gainXp(q.xp);
+    bump(this.progress, 'quests');
+    this.gainRep(REP_PER_QUEST, q.map);
+    this.checkAchievements();
     this.ui.questsChanged();
     this.save();
     if (id === FINAL_QUEST) this.ui.victory();
@@ -1007,11 +1418,14 @@ export class Game {
 
   private onPlayerDeath() {
     const pl = this.player;
+    this.dismount();
+    this.autoPath = null;
+    bump(this.progress, 'deaths');
     pl.target = null;
     this.autoAttack = false;
     this.leap = null;
-    for (const p of [...this.pets]) this.removePet(p);
-    for (const u of this.units) if (u.target === pl) this.evade(u);
+    for (const p of [...this.pets]) if (!p.role) this.removePet(p);
+    for (const u of this.units) if (u.target === pl || (u.target && u.target.role)) this.evade(u);
     play('death');
     this.ui.playerDied();
   }
@@ -1028,6 +1442,8 @@ export class Game {
     this.resource = cls.resource === 'mana' ? this.maxResource * 0.6 : 0;
     this.placeUnit(pl, this.map.spawn.x, this.map.spawn.z);
     pl.facing = Math.PI;
+    // The party regroups at the entrance.
+    for (const c of this.pets) if (c.role) this.reviveCompanion(c, 1, true);
     this.cam.yaw = 0;
     this.save();
   }

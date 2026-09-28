@@ -4,9 +4,15 @@
 export type MobKind =
   | 'wolf' | 'spider' | 'raider' | 'brute' | 'chieftain' | 'imp' | 'boss'
   | 'rimewolf' | 'frostling' | 'yeti' | 'drowned' | 'thane' | 'shard' | 'ysolde'
-  | 'scorpion' | 'nomad' | 'golem' | 'cultist' | 'warlord' | 'wisp' | 'azhkar';
+  | 'scorpion' | 'nomad' | 'golem' | 'cultist' | 'warlord' | 'wisp' | 'azhkar'
+  // Dungeons
+  | 'magmaHound' | 'emberfiend' | 'forgemaster' | 'ignara'
+  | 'drownedGuard' | 'iceWraith' | 'captainVeyl' | 'drownedKing'
+  | 'tombScarab' | 'sunPriest' | 'colossus' | 'nehkt';
 export type ModelKind = 'wolf' | 'spider' | 'humanoid' | 'brute' | 'boss' | 'dragon' | 'imp';
 export type MapId = 'vale' | 'frostmarch' | 'sunscar';
+export type DungeonId = 'warrens' | 'drownedHalls' | 'sunTomb';
+export type WorldId = MapId | DungeonId;
 
 export interface BossDef {
   /** Telegraphed circle dropped on the player's position. */
@@ -76,6 +82,28 @@ export const MOBS: Record<MobKind, MobDef> = {
     kind: 'azhkar', name: 'Azhkar the Sunflayer', model: 'boss', levels: [30, 30], hpMul: 8.5, dmgMul: 1, speed: 5.4, scale: 1.05, color: '#6a4a1a', accent: '#ffd84a', elite: true, respawn: 150,
     boss: { ring: { radius: 6.5, every: 7.5, delay: 1.8, frac: 0.25, color: '#ffb020' }, adds: 'wisp', addsCount: 2, addsAt: [0.75, 0.5, 0.25], enrageAt: 0.2, title: 'Azhkar' },
   },
+  // ---------------- Dungeons (group content; balanced for a party of three) ----------------
+  magmaHound: { kind: 'magmaHound', name: 'Magma Hound', model: 'wolf', levels: [9, 10], hpMul: 2.4, dmgMul: 1.25, speed: 6.8, scale: 1.2, color: '#4a2a22', accent: '#ff6a2a', onHit: { effect: 'burn', chance: 0.3 }, respawn: 1e9 },
+  emberfiend: { kind: 'emberfiend', name: 'Emberfiend', model: 'imp', levels: [9, 10], hpMul: 2.25, dmgMul: 1.31, speed: 6.5, scale: 1.3, color: '#8a2a10', accent: '#ffd166', respawn: 1e9 },
+  forgemaster: { kind: 'forgemaster', name: 'Forgemaster Hrull', model: 'brute', levels: [10, 10], hpMul: 10.5, dmgMul: 1.35, speed: 5, scale: 1.3, color: '#3a2a22', accent: '#ff8a2a', elite: true, rally: true, slam: { radius: 7, every: 9, mul: 1.6 }, respawn: 1e9 },
+  ignara: {
+    kind: 'ignara', name: 'Ignara, Mother of Cinders', model: 'boss', levels: [11, 11], hpMul: 24, dmgMul: 1.3, speed: 5, scale: 1, color: '#5a1a0a', accent: '#ffb347', elite: true, respawn: 1e9,
+    boss: { ring: { radius: 6, every: 7, delay: 1.8, frac: 0.22, color: '#ff7a1a' }, adds: 'imp', addsCount: 2, addsAt: [0.7, 0.4], enrageAt: 0.15, title: 'Ignara' },
+  },
+  drownedGuard: { kind: 'drownedGuard', name: 'Drowned Guardsman', model: 'humanoid', levels: [19, 20], hpMul: 2.4, dmgMul: 1.25, speed: 5.4, scale: 1.1, color: '#1f4a4a', accent: '#8affe0', onHit: { effect: 'slow', chance: 0.25 }, respawn: 1e9 },
+  iceWraith: { kind: 'iceWraith', name: 'Ice Wraith', model: 'imp', levels: [19, 20], hpMul: 2.1, dmgMul: 1.38, speed: 7, scale: 1.3, color: '#bfe8ff', accent: '#ffffff', onHit: { effect: 'slow', chance: 0.3 }, respawn: 1e9 },
+  captainVeyl: { kind: 'captainVeyl', name: 'Captain Veyl', model: 'humanoid', levels: [20, 20], hpMul: 10.5, dmgMul: 1.35, speed: 5.6, scale: 1.5, color: '#2a3a5a', accent: '#8affe0', elite: true, rally: true, slam: { radius: 7, every: 9, mul: 1.6 }, respawn: 1e9 },
+  drownedKing: {
+    kind: 'drownedKing', name: 'The Drowned King', model: 'boss', levels: [21, 21], hpMul: 24, dmgMul: 1.3, speed: 5, scale: 1.05, color: '#1a3a3a', accent: '#6affd0', elite: true, respawn: 1e9,
+    boss: { ring: { radius: 6.5, every: 7, delay: 1.8, frac: 0.22, color: '#3ad0c0' }, adds: 'shard', addsCount: 2, addsAt: [0.7, 0.4], enrageAt: 0.15, title: 'The Drowned King' },
+  },
+  tombScarab: { kind: 'tombScarab', name: 'Tomb Scarab', model: 'spider', levels: [29, 30], hpMul: 2.25, dmgMul: 1.25, speed: 6.6, scale: 1.3, color: '#3a5a2a', accent: '#ffd84a', onHit: { effect: 'poison', chance: 0.35 }, respawn: 1e9 },
+  sunPriest: { kind: 'sunPriest', name: 'Sunbound Priest', model: 'humanoid', levels: [29, 30], hpMul: 2.25, dmgMul: 1.38, speed: 5.6, scale: 1.05, color: '#e0c890', accent: '#ffb020', onHit: { effect: 'burn', chance: 0.35 }, respawn: 1e9 },
+  colossus: { kind: 'colossus', name: 'Guardian Colossus', model: 'brute', levels: [30, 30], hpMul: 11.2, dmgMul: 1.35, speed: 4.6, scale: 1.4, color: '#c8a870', accent: '#8affff', elite: true, rally: true, slam: { radius: 7.5, every: 9, mul: 1.6 }, respawn: 1e9 },
+  nehkt: {
+    kind: 'nehkt', name: 'Nehkt, the First Sun', model: 'boss', levels: [31, 31], hpMul: 24, dmgMul: 1.3, speed: 5, scale: 1.1, color: '#8a6a1a', accent: '#ffe08a', elite: true, respawn: 1e9,
+    boss: { ring: { radius: 7, every: 6.5, delay: 1.8, frac: 0.22, color: '#ffd84a' }, adds: 'wisp', addsCount: 3, addsAt: [0.75, 0.5, 0.25], enrageAt: 0.15, title: 'Nehkt' },
+  },
 };
 
 export interface Zone { id: string; name: string; x: number; z: number; radius: number; ground: string; groundAlt: string }
@@ -124,10 +152,16 @@ export interface MapTheme {
   hazard?: { x: number; z: number; r: number; fog: string; skyTop: string };
   flora: FloraRule[];
   heightScale: number;
+  /** Raise terrain away from the roads into canyon walls (dungeons). */
+  canyon?: boolean;
 }
 
 export interface MapDef {
-  id: MapId;
+  id: WorldId;
+  /** The act this map belongs to (itself for the three open maps). */
+  act: MapId;
+  /** Set for instanced group dungeons. */
+  dungeon?: { minLevel: number; finalBoss: MobKind; blurb: string };
   name: string;
   subtitle: string;
   levels: [number, number];
@@ -154,7 +188,7 @@ const hubNpcs = (prefix: string, a: [string, string, string], b: [string, string
 
 export const MAPS: Record<MapId, MapDef> = {
   vale: {
-    id: 'vale', name: 'Vale of Ashenveil', subtitle: 'Act I', levels: [1, 10], spawn: { x: 0, z: 139 }, finalQuest: 'cindermaw', next: 'frostmarch',
+    id: 'vale', act: 'vale', name: 'Vale of Ashenveil', subtitle: 'Act I', levels: [1, 10], spawn: { x: 0, z: 139 }, finalQuest: 'cindermaw', next: 'frostmarch',
     zones: [
       { id: 'hearthmoor', name: 'Hearthmoor', x: HUB.x, z: HUB.z, radius: 38, ground: '#6f8f45', groundAlt: '#86a255' },
       { id: 'duskglade', name: 'Duskwood Glade', x: -115, z: 85, radius: 60, ground: '#3f6a34', groundAlt: '#4f7a3a' },
@@ -204,7 +238,7 @@ export const MAPS: Record<MapId, MapDef> = {
     },
   },
   frostmarch: {
-    id: 'frostmarch', name: 'Frostmarch', subtitle: 'Act II', levels: [10, 20], spawn: { x: 0, z: 139 }, finalQuest: 'fm_queen', next: 'sunscar',
+    id: 'frostmarch', act: 'frostmarch', name: 'Frostmarch', subtitle: 'Act II', levels: [10, 20], spawn: { x: 0, z: 139 }, finalQuest: 'fm_queen', next: 'sunscar',
     zones: [
       { id: 'emberhold', name: 'Emberhold', x: HUB.x, z: HUB.z, radius: 38, ground: '#c8d0d8', groundAlt: '#d8dee4' },
       { id: 'rimewood', name: 'Rimewood', x: -110, z: 85, radius: 60, ground: '#b8c4cc', groundAlt: '#c8d4dc' },
@@ -252,7 +286,7 @@ export const MAPS: Record<MapId, MapDef> = {
     },
   },
   sunscar: {
-    id: 'sunscar', name: 'Sunscar Dunes', subtitle: 'Act III', levels: [20, 30], spawn: { x: 0, z: 139 }, finalQuest: 'ss_azhkar', next: null,
+    id: 'sunscar', act: 'sunscar', name: 'Sunscar Dunes', subtitle: 'Act III', levels: [20, 30], spawn: { x: 0, z: 139 }, finalQuest: 'ss_azhkar', next: null,
     zones: [
       { id: 'mirel', name: 'Oasis of Mirel', x: HUB.x, z: HUB.z, radius: 38, ground: '#9aa860', groundAlt: '#aab870' },
       { id: 'stingfields', name: 'The Sting Fields', x: -110, z: 85, radius: 60, ground: '#d8b878', groundAlt: '#e4c488' },

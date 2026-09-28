@@ -4,6 +4,8 @@ import { ABILITIES, CLASSES, POTION, SPECS } from '../data/classes';
 import { QUEST_BY_ID } from '../data/quests';
 import { ALL_NPCS, MOBS, WORLD_LIMIT } from '../data/world';
 import { abilityCost } from '../game/abilities';
+import { MATERIALS } from '../data/economy';
+import { activeBuffs } from '../game/economy';
 import type { Game } from '../game/game';
 import { abilityLearned, canChooseSpec, nextQuestLevel, npcMarker, pointsAvailable } from '../game/progress';
 import { levelColor, xpToNext } from '../game/rules';
@@ -37,6 +39,11 @@ export class Hud {
     $('btnQuests').onclick = handlers.quests;
     $('btnMenu').onclick = handlers.menu;
     $('talkBtn').onclick = handlers.talk;
+    // Tap a tracked quest to auto-travel to it.
+    $('tracker').addEventListener('click', (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLElement>('[data-go]');
+      if (b) game.travelTo(b.dataset.go || null);
+    });
     $('targetFrame').onclick = () => {
       const t = game.player.target;
       if (t?.npc && t.distTo(game.player) < 7) handlers.talk();
@@ -91,6 +98,11 @@ export class Hud {
     c.className = 'count';
     p.el.appendChild(c);
     p.count = c;
+    const m = make('ab-p', 292, 12, iconHtml('horse', ['#e0c8a0', '#4a3a2a']), 'mount', () => g.toggleMount(), 'Mount');
+    const ml = document.createElement('div');
+    ml.className = 'lockText';
+    ml.textContent = `Lv 5`;
+    m.el.appendChild(ml);
     const t = make('ab-p', 282, 150, iconHtml('leap', ['#d8d0c0', '#3a3440']), 'cycle', () => g.cycleTarget(), 'Next target');
     t.el.querySelector('.icon')!.innerHTML = '<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="26" fill="none" stroke="#fff" stroke-width="7"/><path d="M50 8v22M50 70v22M8 50h22M70 50h22" stroke="#fff" stroke-width="7" stroke-linecap="round"/></svg>';
   }
@@ -146,15 +158,15 @@ export class Hud {
       const p = g.progress;
       const hub = g.map.zones[0].name;
       const hasOffer = g.npcs.some((n) => npcMarker(p, n.npc!.id) !== '');
-      const next = nextQuestLevel(p, g.map.id);
+      const next = nextQuestLevel(p, g.map.act);
       let hint = '';
-      if (hasOffer) hint = `<div class="tq"><b>${escapeHtml(hub)}</b><span>Talk to the villagers marked with <b style="display:inline;color:#ffd84a">!</b></span></div>`;
+      if (hasOffer) hint = `<button class="tq go" data-go=""><b>${escapeHtml(hub)}</b><span>Talk to the villagers marked with <b style="display:inline;color:#ffd84a">!</b></span><i>GO</i></button>`;
       else if (next) hint = `<div class="tq"><b>Grow stronger</b><span>New quests at level ${next}. Hunt in the wilds.</span></div>`;
       $('tracker').innerHTML = hint;
       return;
     }
     $('tracker').innerHTML = list
-      .map(({ state, def }) => `<div class="tq ${state.done ? 'ready' : ''}"><b>${escapeHtml(def.title)}</b><span>${state.done ? 'Return to ' + npcName(def.turnIn ?? def.giver) : `${def.objective.label}: ${state.progress}/${def.objective.count}`}</span></div>`)
+      .map(({ state, def }) => `<button class="tq go ${state.done ? 'ready' : ''}" data-go="${def.id}"><b>${escapeHtml(def.title)}</b><span>${state.done ? 'Return to ' + npcName(def.turnIn ?? def.giver) : `${def.objective.label}: ${state.progress}/${def.objective.count}`}</span><i>GO</i></button>`)
       .join('');
   }
 
@@ -169,7 +181,7 @@ export class Hud {
     this.set('skillBadge', 'text', canChooseSpec(p) ? '!' : pts > 0 ? String(pts) : '');
     $('skillBadge').hidden = !(canChooseSpec(p) || pts > 0);
     // Player frame.
-    this.set('pName', 'text', p.name);
+    this.set('pName', 'html', `${escapeHtml(p.name)}${p.title ? ` <small class="ptitle">${escapeHtml(p.title)}</small>` : ''}`);
     this.set('pLevel', 'text', `Lv ${p.level}`);
     this.set('pHp', 'width', (pl.hp / pl.maxHp).toFixed(3));
     this.set('pHpText', 'text', `${Math.ceil(pl.hp)} / ${pl.maxHp}`);
@@ -181,6 +193,8 @@ export class Hud {
     if (shieldFrac > 0) buffs.push(`<div class="buff">${iconHtml('shield', ABILITIES.staticGuard.color)}</div>`);
     if (pl.dots.some((d) => d.heal)) buffs.push(`<div class="buff">${iconHtml('leaf', ABILITIES.renewal.color)}</div>`);
     if (pl.dots.some((d) => !d.heal)) buffs.push(`<div class="buff">${iconHtml('thorn', ['#9be26a', '#3a1a3a'])}</div>`);
+    for (const b of activeBuffs(p)) buffs.push(`<div class="buff">${iconHtml(b.id === 'might' ? 'flame' : 'shield', b.id === 'might' ? ['#ffb08a', '#7a1b0b'] : ['#d8d0c0', '#4a4450'])}</div>`);
+    if (g.mounted) buffs.push(`<div class="buff">${iconHtml('horse', ['#e0c8a0', '#4a3a2a'])}</div>`);
     if (g.pets.length) buffs.push(`<div class="buff">${iconHtml('paw', ABILITIES.spiritWolf.color)}</div>`);
     if (pl.guardUntil > g.now) buffs.push(`<div class="buff">${iconHtml('shield', ['#e6d7b0', '#5a4a2a'])}</div>`);
     if (pl.slowed(g.now)) buffs.push(`<div class="buff">${iconHtml('snow', ['#bfefff', '#1a4a8a'])}</div>`);
@@ -210,6 +224,11 @@ export class Hud {
         continue;
       }
       if (b.kind === 'cycle') continue;
+      if (b.kind === 'mount') {
+        b.el.classList.toggle('locked', !g.canMount());
+        b.el.style.boxShadow = g.mounted ? '0 0 0 3px #ffd84a' : '';
+        continue;
+      }
       let left = 0;
       let total = 1;
       if (b.kind === 'potion') {
@@ -234,9 +253,11 @@ export class Hud {
 
     // Talk button.
     const npc = !pl.dead ? g.nearestNpc(6) : null;
+    const node = !pl.dead && !npc ? g.nearestNode(4) : null;
     const talk = $('talkBtn');
-    talk.hidden = !npc;
+    talk.hidden = !npc && !node;
     if (npc) this.set('talkBtn', 'text', `Talk to ${npc.name}`);
+    else if (node) this.set('talkBtn', 'text', `Gather ${MATERIALS[node.mat].name}`);
 
     // XP.
     const need = xpToNext(p.level);

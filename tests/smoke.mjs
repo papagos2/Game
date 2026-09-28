@@ -98,11 +98,52 @@ try {
     await shot('06-bag');
     await page.locator('#x').click();
     await page.locator('#btnQuests').click();
-    await page.getByText('Quest Log').waitFor();
+    await page.getByText('Journal').first().waitFor();
+    for (const t of ['bounties', 'factions', 'achievements']) {
+      await page.locator(`[data-tab="${t}"]`).click();
+      await page.waitForTimeout(150);
+    }
+    await shot('06b-journal');
     await page.locator('#x').click();
     await page.locator('#btnMenu').click();
     await page.getByText('How to play').waitFor();
     await page.locator('#resume').click();
+  });
+  await step('auto-travel on a mount, gather and craft', async () => {
+    const st = await G(() => {
+      const g = window.__game;
+      while (g.progress.level < 5) g.gainXp(200);
+      g.player.pos.set(0, 0, 139);
+      g.moveUnit(g.player, 0, 0);
+      g.player.lastCombatAt = -99;
+      g.units.forEach((u) => { if (u.target === g.player) { u.target = null; u.state = 'evade'; } });
+      const q = g.progress.active[0];
+      const ok = g.travelTo(q.id);
+      const start = { x: g.player.pos.x, z: g.player.pos.z };
+      for (let i = 0; i < 60; i++) g.update(1 / 30);
+      return { ok, mounted: g.mounted, moved: Math.hypot(g.player.pos.x - start.x, g.player.pos.z - start.z), path: !!g.autoPath };
+    });
+    await page.waitForTimeout(400);
+    await shot('07a-mounted');
+    if (!st.ok || !st.mounted || st.moved < 10) throw new Error('auto-travel did not work ' + JSON.stringify(st));
+    const g2 = await G(() => {
+      const g = window.__game;
+      g.autoPath = null;
+      g.dismount();
+      const n = g.nodes[0];
+      g.player.pos.set(n.x + 1, 0, n.z);
+      g.moveUnit(g.player, 0, 0);
+      return g.gatherNearest();
+    });
+    if (!g2) throw new Error('could not gather');
+    await G(() => { window.__game.progress.materials.sunleaf = 10; });
+    await page.locator('#btnBag').click();
+    await page.locator('[data-bag]').click();
+    await page.locator('[data-craft="draught"]').click();
+    await shot('07b-crafting');
+    const pots = await G(() => window.__game.progress.stats.crafted);
+    if (pots < 1) throw new Error('crafting failed');
+    await page.locator('#x').click();
   });
   await step('boss fight at level 10', async () => {
     await G(() => {
@@ -155,6 +196,41 @@ try {
     if (!cast) throw new Error('could not cast the new spec ability');
     const slots = await page.locator('#actionBar .ab-spec').count();
     if (slots !== 2) throw new Error('expected 2 spec buttons, got ' + slots);
+  });
+  await step('enter a dungeon with an AI party and leave again', async () => {
+    await G(() => {
+      const g = window.__game;
+      const w = g.npcs.find((n) => n.npc.travel);
+      g.player.pos.set(w.pos.x - 2, w.pos.y, w.pos.z - 2);
+      g.tryInteract();
+    });
+    await page.locator('[data-map="warrens"]').click();
+    await page.waitForFunction(() => window.__game && window.__game.map.id === 'warrens' && !window.__game.paused);
+    const party = await G(() => window.__game.pets.filter((p) => p.role).map((p) => p.role));
+    if (party.length !== 2) throw new Error('expected 2 companions, got ' + JSON.stringify(party));
+    await G(() => {
+      const g = window.__game;
+      const m = g.units.filter((u) => !u.dead).sort((a, b) => b.home.z - a.home.z)[0];
+      g.player.pos.set(m.pos.x, 0, m.pos.z + 16);
+      g.moveUnit(g.player, 0, 0);
+      g.player.target = m;
+      g.mainAction();
+      for (let i = 0; i < 200; i++) g.update(1 / 30);
+    });
+    await page.waitForTimeout(600);
+    await shot('11b-dungeon');
+    const fought = await G(() => window.__game.units.some((u) => u.dead || u.hp < u.maxHp));
+    if (!fought) throw new Error('party did not fight');
+    await G(() => {
+      const g = window.__game;
+      g.units.forEach((u) => { u.target = null; u.state = 'evade'; });
+      g.player.lastCombatAt = -99;
+      const w = g.npcs.find((n) => n.npc.travel);
+      g.player.pos.set(w.pos.x - 2, w.pos.y, w.pos.z - 2);
+      g.tryInteract();
+    });
+    await page.locator('[data-map="vale"]').click();
+    await page.waitForFunction(() => window.__game && window.__game.map.id === 'vale' && !window.__game.paused);
   });
   await step('travel to Frostmarch and the Sunscar Dunes', async () => {
     for (const [map, shotName] of [['frostmarch', '12-frostmarch'], ['sunscar', '13-sunscar']]) {

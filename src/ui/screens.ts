@@ -3,7 +3,8 @@ import { ABILITIES, CLASSES, POTION, SPEC_LEVEL, SPECS, type AbilityDef, type Cl
 import { GEAR_SLOTS, SLOT_LABEL, TYPE_LABEL, type GearSlot } from '../data/items';
 import { QUESTS, QUEST_BY_ID, type QuestDef } from '../data/quests';
 import { TIER_POINTS, TREES, type TalentTree } from '../data/talents';
-import { MAPS, MAP_ORDER, type MapDef, type MapId, type NpcDef } from '../data/world';
+import { DUNGEONS, DUNGEON_ORDER } from '../data/dungeons';
+import { MAPS, MAP_ORDER, type MapDef, type MapId, type NpcDef, type WorldId } from '../data/world';
 import { abilityCooldown, abilityCost } from '../game/abilities';
 import type { Game } from '../game/game';
 import {
@@ -11,6 +12,8 @@ import {
 } from '../game/progress';
 import { RARITY_COLORS, RARITY_NAMES, itemScore, respecCost, slotFor, upgradeValue, type Item } from '../game/rules';
 import { isSoundEnabled, play, setSoundEnabled } from '../game/audio';
+import { ACHIEVEMENTS, FACTIONS, MATERIALS, MAX_GATHER_SKILL, MAX_REFORGE, RECIPES, type MaterialId, type RecipeId } from '../data/economy';
+import { achievementPoints, bountyLabel, claimableBounties, craft, craftBlocker, repRank, titles } from '../game/economy';
 import { escapeHtml, npcName } from './hud';
 import { glyphSvg, iconHtml } from './icons';
 
@@ -130,7 +133,7 @@ function abilityText(g: Game, ab: AbilityDef) {
 export class Panels {
   private tab: 'core' | 'spec' = 'core';
 
-  constructor(private game: Game, private onClose: () => void, private onQuit: () => void, private onTravel: (map: MapId) => void) {}
+  constructor(private game: Game, private onClose: () => void, private onQuit: () => void, private onTravel: (map: WorldId) => void) {}
 
   private close = () => {
     closeScreens();
@@ -245,6 +248,16 @@ export class Panels {
         <p>The waystones remember every road a Warden has opened. Where will you go?</p>
         <div class="questList">${rows}</div>
         <p class="sub" style="margin-top:10px">New lands open when you defeat the master of the last one.</p>
+        ${g.map.dungeon ? '' : `<h3>Dungeons</h3>
+        <p class="sub">Group adventures. AI companions join you to fill the roles you do not play (tank, healer or damage).</p>
+        <div class="questList">${DUNGEON_ORDER.map((id) => {
+          const d = DUNGEONS[id];
+          const open = p.unlocked.includes(d.act) && p.level >= d.dungeon!.minLevel;
+          const cleared = p.dungeons.includes(id);
+          return `<button class="questItem ${open ? '' : 'dim'}" data-map="${id}" ${open ? '' : 'disabled'}>
+            <span class="mk">${open ? '&#9876;' : '&times;'}</span>
+            <span><b>${escapeHtml(d.name)}</b>${cleared ? ' <small style="color:#6ee07a">(cleared)</small>' : ''}<br><small style="color:var(--ink-dim)">Level ${d.dungeon!.minLevel}+ - ${escapeHtml(MAPS[d.act].name)}. ${escapeHtml(d.dungeon!.blurb)}</small></span></button>`;
+        }).join('')}</div>`}
       </div>`,
     );
     on(el, '#x', this.close);
@@ -291,27 +304,76 @@ export class Panels {
     });
   }
 
-  questLog() {
+  questLog(tab: 'quests' | 'bounties' | 'factions' | 'achievements' = 'quests') {
     const g = this.game;
     const p = g.progress;
-    const active = p.active
-      .map((a) => {
-        const q = QUEST_BY_ID[a.id];
-        const where = q.map !== g.map.id ? ` <small style="color:var(--ink-dim)">(${escapeHtml(MAPS[q.map].name)})</small>` : '';
-        return `<div class="questItem" style="display:block"><b>${escapeHtml(q.title)}</b>${where}
-          <p style="margin:4px 0">${a.done ? `Complete. Return to ${escapeHtml(npcName(q.turnIn ?? q.giver))}.` : escapeHtml(q.progress)}</p>
-          <small style="color:var(--ink-dim)">${escapeHtml(q.objective.label)}: ${a.progress}/${q.objective.count}</small></div>`;
-      })
-      .join('');
+    const tabs = `<div class="tabs">${(['quests', 'bounties', 'factions', 'achievements'] as const)
+      .map((t) => `<button class="tab ${t === tab ? 'on' : ''}" data-tab="${t}">${cap(t)}${t === 'bounties' && claimableBounties(p, g.map.act).length ? ' !' : ''}</button>`).join('')}</div>`;
+    let body = '';
+    if (tab === 'quests') {
+      const active = p.active
+        .map((a) => {
+          const q = QUEST_BY_ID[a.id];
+          const where = q.map !== g.map.id ? ` <small style="color:var(--ink-dim)">(${escapeHtml(MAPS[q.map].name)})</small>` : '';
+          return `<div class="questItem" style="display:block"><b>${escapeHtml(q.title)}</b>${where}
+            <p style="margin:4px 0">${a.done ? `Complete. Return to ${escapeHtml(npcName(q.turnIn ?? q.giver))}.` : escapeHtml(q.progress)}</p>
+            <small style="color:var(--ink-dim)">${escapeHtml(q.objective.label)}: ${a.progress}/${q.objective.count}</small>
+            ${q.map === g.map.id ? `<div class="row" style="margin-top:6px"><button class="btn secondary small" data-go="${q.id}">Go there</button></div>` : ''}</div>`;
+        })
+        .join('');
+      body = `<p class="sub">${p.completed.length} of ${QUESTS.length} quests completed. Tap <b>Go there</b> (or a quest on the screen) to travel automatically.</p>
+        <div class="questList">${active || '<p>No active quests. Look for villagers with a <b style="color:#ffd84a">!</b> above their heads.</p>'}</div>`;
+    } else if (tab === 'bounties') {
+      const list = p.bounties.list
+        .filter((b) => p.unlocked.includes(b.map))
+        .map((b) => `<div class="questItem" style="display:block"><b>${escapeHtml(bountyLabel(b))}</b> <small style="color:var(--ink-dim)">(${escapeHtml(MAPS[b.map].name)})</small>
+          <p style="margin:4px 0"><small>${b.claimed ? 'Claimed' : `${b.progress}/${b.count}`} - reward: experience, gold and ${escapeHtml(FACTIONS[b.map].name)} reputation</small></p>
+          ${!b.claimed && b.progress >= b.count ? `<button class="btn small" data-claim="${b.id}">Claim reward</button>` : ''}</div>`)
+        .join('');
+      body = `<p class="sub">New bounties every day. Finish them anywhere and claim the reward here.</p><div class="questList">${list}</div>`;
+    } else if (tab === 'factions') {
+      body = `<p class="sub">Gain reputation from quests, bounties, dungeons and defeating enemies in each land. Higher ranks lower vendor prices; <b>Revered</b> unlocks an epic item at that land's vendor.</p>
+        <div class="questList">${MAP_ORDER.map((m) => {
+          const f = FACTIONS[m];
+          const r = repRank(p.rep[m] ?? 0);
+          const pct = r.span ? Math.round((r.into / r.span) * 100) : 100;
+          return `<div class="questItem" style="display:block"><b style="color:${f.color}">${escapeHtml(f.name)}</b> <small style="color:var(--ink-dim)">(${escapeHtml(MAPS[m].name)})</small>
+            <div class="bar rep"><div class="fill" style="transform:scaleX(${pct / 100});background:${f.color}"></div><span>${r.name}${r.span ? ` ${r.into}/${r.span}` : ''}</span></div>
+            <small style="color:var(--ink-dim)">${r.discount ? `${Math.round(r.discount * 100)}% vendor discount` : 'No discount yet'}</small></div>`;
+        }).join('')}</div>`;
+    } else {
+      const list = ACHIEVEMENTS.map((a) => {
+        const has = p.achievements.includes(a.id);
+        return `<div class="ach ${has ? 'has' : ''}"><b>${escapeHtml(a.name)}</b> <small>${a.points} pts</small><br><span>${escapeHtml(a.desc)}</span>${a.title ? `<br><small>Title: "${escapeHtml(a.title)}"</small>` : ''}</div>`;
+      }).join('');
+      const tl = titles(p);
+      body = `<p class="sub">${p.achievements.length}/${ACHIEVEMENTS.length} achievements - ${achievementPoints(p)} points.</p>
+        ${tl.length ? `<div class="row" style="margin:6px 0 10px"><span class="sub">Title:</span>${['', ...tl].map((t) => `<button class="tab ${p.title === (t || null) ? 'on' : ''}" data-title="${escapeHtml(t)}">${t ? escapeHtml(t) : 'None'}</button>`).join('')}</div>` : ''}
+        <div class="achGrid">${list}</div>`;
+    }
     const el = show(
-      `<div class="panel dialog">
+      `<div class="panel dialog wide">
         <button class="close" id="x" aria-label="Close">&times;</button>
-        <h2>Quest Log</h2>
-        <p class="sub">${p.completed.length} of ${QUESTS.length} quests completed. Gold markers on the minimap show where to go.</p>
-        <div class="questList">${active || '<p>No active quests. Look for villagers with a <b style="color:#ffd84a">!</b> above their heads.</p>'}</div>
+        <h2>Journal</h2>
+        ${tabs}
+        ${body}
       </div>`,
     );
     on(el, '#x', this.close);
+    on(el, '[data-tab]', (_e, b) => this.questLog(b.dataset.tab as typeof tab));
+    on(el, '[data-go]', (_e, b) => {
+      this.close();
+      g.travelTo(b.dataset.go!);
+    });
+    on(el, '[data-claim]', (_e, b) => {
+      g.claimBounty(b.dataset.claim!);
+      this.questLog('bounties');
+    });
+    on(el, '[data-title]', (_e, b) => {
+      p.title = b.dataset.title || null;
+      g.save();
+      this.questLog('achievements');
+    });
   }
 
   // ----- Skills: path choice and talent trees -----
@@ -412,6 +474,57 @@ export class Panels {
 
   // ----- Bag -----
 
+  crafting(reforgeSlot?: GearSlot) {
+    const g = this.game;
+    const p = g.progress;
+    const mats = (Object.keys(MATERIALS) as MaterialId[])
+      .filter((m) => (p.materials[m] ?? 0) > 0)
+      .map((m) => `<span class="mat" style="border-color:${MATERIALS[m].color}">${escapeHtml(MATERIALS[m].name)} x${p.materials[m]}</span>`).join('') || '<span class="sub">No materials yet. Look for glowing herbs and ore veins in the wilds.</span>';
+    const recipes = RECIPES.map((r) => {
+      const block = craftBlocker(p, r.id);
+      return `<div class="questItem" style="display:block"><b>${escapeHtml(r.name)}</b><br><small style="color:var(--ink-dim)">${escapeHtml(r.desc)} Cost: ${r.herbs ? `${r.herbs} herbs ` : ''}${r.ores ? `${r.ores} ore ` : ''}${r.gold ? `${r.gold} gold` : ''}</small>
+        <div class="row" style="margin-top:6px">${r.id === 'reforge'
+          ? GEAR_SLOTS.filter((sl) => p.gear[sl]).map((sl) => `<button class="btn secondary small" data-reforge="${sl}" ${block || (p.gear[sl]!.upg ?? 0) >= MAX_REFORGE ? 'disabled' : ''}>${escapeHtml(SLOT_LABEL[sl])} (+${(p.gear[sl]!.upg ?? 0) * 2})</button>`).join('') || '<span class="sub">Equip an item first.</span>'
+          : `<button class="btn small" data-craft="${r.id}" ${block ? 'disabled' : ''}>${block ? escapeHtml(block) : 'Craft'}</button>`}</div></div>`;
+    }).join('');
+    const el = show(
+      `<div class="panel bagPanel">
+        <button class="close" id="x" aria-label="Close">&times;</button>
+        <h2>Crafting</h2>
+        <div class="tabs"><button class="tab" data-bag="gear">Gear</button><button class="tab on">Crafting</button></div>
+        <p class="sub">Gathering skill <b>${p.gatherSkill}</b> / ${MAX_GATHER_SKILL}. Frostmarch materials need 60, Sunscar 140.</p>
+        <div class="mats">${mats}</div>
+        <div class="questList">${recipes}</div>
+      </div>`,
+    );
+    void reforgeSlot;
+    on(el, '#x', this.close);
+    on(el, '[data-bag]', () => this.bag());
+    on(el, '[data-craft]', (_e, b) => {
+      const res = craft(p, b.dataset.craft as RecipeId);
+      if (res) {
+        g.recomputeStats();
+        g.checkAchievements();
+        g.ui.toast(escapeHtml(res));
+        play('loot');
+        g.save();
+      }
+      this.crafting();
+    });
+    on(el, '[data-reforge]', (_e, b) => {
+      const it = p.gear[b.dataset.reforge as GearSlot];
+      const res = it ? craft(p, 'reforge', it) : null;
+      if (res) {
+        g.recomputeStats();
+        g.checkAchievements();
+        g.ui.toast(escapeHtml(res));
+        play('levelup');
+        g.save();
+      }
+      this.crafting();
+    });
+  }
+
   bag(selected?: string) {
     const g = this.game;
     const p = g.progress;
@@ -432,7 +545,8 @@ export class Panels {
     const el = show(
       `<div class="panel bagPanel">
         <button class="close" id="x" aria-label="Close">&times;</button>
-        <h2>${escapeHtml(p.name)}</h2>
+        <h2>${escapeHtml(p.name)}${p.title ? ` <small class="ptitle">${escapeHtml(p.title)}</small>` : ''}</h2>
+        <div class="tabs"><button class="tab on">Gear</button><button class="tab" data-bag="craft">Crafting</button></div>
         <p class="sub">Level ${p.level} ${p.spec ? SPECS[p.spec].name : CLASSES[p.cls].name} - <span class="gold">${p.gold} gold</span> - ${p.potions} healing draught${p.potions === 1 ? '' : 's'}</p>
         <div class="bagCols">
           <div>
@@ -457,6 +571,7 @@ export class Panels {
     );
     on(el, '#x', this.close);
     on(el, '.bag .itemCard', (_e, b) => this.bag(b.dataset.id === selected ? undefined : b.dataset.id));
+    on(el, '[data-bag]', () => this.crafting());
     on(el, '#equip', () => {
       if (sel) g.equip(sel);
       this.bag();
@@ -526,6 +641,21 @@ export class Panels {
     });
   }
 
+  dungeonComplete(map: MapDef, first: boolean) {
+    const el = show(
+      `<div class="center-col panel" style="max-width:560px">
+        <h1 class="bigTitle win">Dungeon cleared</h1>
+        <p>${escapeHtml(map.name)} is quiet at last.${first ? ' First clear: bonus experience!' : ''} Check your bag for the spoils.</p>
+        <div class="row"><button class="btn" id="leave">Return to ${escapeHtml(MAPS[map.act].zones[0].name)}</button><button class="btn secondary" id="stay">Stay</button></div>
+      </div>`,
+    );
+    on(el, '#stay', this.close);
+    on(el, '#leave', () => {
+      closeScreens();
+      this.onTravel(map.act);
+    });
+  }
+
   actComplete(map: MapDef, unlocked: MapId | null) {
     const next = unlocked ? MAPS[unlocked] : map.next ? MAPS[map.next] : null;
     const el = show(
@@ -563,7 +693,6 @@ export class Panels {
 function cap(s: string) {
   return s[0].toUpperCase() + s.slice(1);
 }
-void cap;
 
 export function saveSetting(k: string, v: string) {
   try {

@@ -40,6 +40,10 @@ export class Unit {
   guardUntil = 0;
   reflect = 0;
   frenzyUntil = 0;
+  /** AI party members in dungeons. */
+  role: 'tank' | 'healer' | 'dps' | null = null;
+  reviveAt = 0;
+  castAt = 0;
   enraged = false;
   shield = 0;
   shieldUntil = 0;

@@ -150,6 +150,8 @@ async function play([cls, spec]) {
     let actStart = 0;
     let eliteKind = null, eliteFails = 0, eliteLevel = 0;
     let engagedHp = 0, engagedAt = 0;
+    const dungeonTried = new Set();
+    let dgStart = 0, dgDeaths = 0, dungeonFail = false;
     let dmgLog = {};
     const hook = () => {
       const orig = g.dealDamage.bind(g);
@@ -162,6 +164,7 @@ async function play([cls, spec]) {
       const p = P();
       if (pl().dead) {
         deaths++; actDeaths++;
+        if (g.map.dungeon) dgDeaths++;
         if (engaged && window.__mobs[engaged.kind]?.elite) eliteFails++;
         const bossU = g.units.find((u) => window.__mobs[u.kind].boss);
         if (actDeaths < 40) log.push(`  ${Math.round(g.now / 60)}m L${p.level} died vs ${engaged?.kind}${engaged && window.__mobs[engaged.kind].boss ? ` boss@${Math.round(100 * bossU.hp / bossU.maxHp)}% dmg=${JSON.stringify(dmgLog)} hp=${pl().maxHp} armor=${pl().armor} dist=${engaged.distTo(pl()).toFixed(1)}` : ''}`);
@@ -169,11 +172,41 @@ async function play([cls, spec]) {
         g.respawnPlayer();
         engaged = null;
       }
-      if (p.completed.includes('ss_azhkar')) break;
+      if (p.completed.includes('ss_azhkar') && (p.dungeons.includes('sunTomb') || dungeonTried.has('sunTomb')) && !g.map.dungeon) break;
       if (p.level >= 10 && !p.spec) { g.chooseSpec(spec); g.paused = true; }
       if (tick % 200 === 0 && D && p.level > 1) spendTalents();
+      // Clear this act's dungeon once, with the AI party, before moving on.
+      const dg = window.__dungeonFor[g.map.act];
+      if (!g.map.dungeon && p.completed.includes(g.map.finalQuest) && dg && !p.dungeons.includes(dg) && !dungeonTried.has(dg)) {
+        dungeonTried.add(dg);
+        const now = g.now;
+        D.travel(dg);
+        g = window.__game;
+        hook();
+        g.paused = true;
+        g.now = now;
+        dgStart = now;
+        dgDeaths = 0;
+        engaged = null;
+        continue;
+      }
+      if (g.map.dungeon) {
+        const bossDead = g.units.some((u) => u.kind === g.map.dungeon.finalBoss && u.dead);
+        if (bossDead || g.now - dgStart > 1800 || dgDeaths > 25) {
+          log.push(`${g.map.name} ${bossDead ? 'cleared' : 'FAILED'} at L${p.level} in ${Math.round((g.now - dgStart) / 60)}m, deaths ${dgDeaths}, party alive ${g.pets.filter((c) => c.role && !c.dead).length}/2`);
+          if (!bossDead) dungeonFail = true;
+          const now = g.now;
+          D.travel(g.map.act);
+          g = window.__game;
+          hook();
+          g.paused = true;
+          g.now = now;
+          engaged = null;
+          continue;
+        }
+      }
       // Move on to the next map when this one is done.
-      if (p.completed.includes(g.map.finalQuest) && g.map.next && p.unlocked.includes(g.map.next)) {
+      if (!g.map.dungeon && p.completed.includes(g.map.finalQuest) && g.map.next && p.unlocked.includes(g.map.next)) {
         log.push(`${g.map.name} done at ${Math.round(g.now / 60)}m (+${Math.round((g.now - actStart) / 60)}m), level ${p.level}, deaths ${actDeaths}`);
         actDeaths = 0;
         const now = g.now;
@@ -186,8 +219,8 @@ async function play([cls, spec]) {
         engaged = null;
         continue;
       }
-      const hasTownWork = p.active.some((a) => a.done && window.__quests[a.id].map === g.map.id)
-        || g.npcs.some((n) => D.questsForNpc(p, n.npc.id).some((e) => e.status === 'available'));
+      const hasTownWork = !g.map.dungeon && p.active.some((a) => a.done && window.__quests[a.id].map === g.map.id)
+        || (!g.map.dungeon && g.npcs.some((n) => D.questsForNpc(p, n.npc.id).some((e) => e.status === 'available')));
       if (hasTownWork) {
         teleport(g.map.spawn.x, g.map.spawn.z);
         engaged = null;
@@ -211,7 +244,9 @@ async function play([cls, spec]) {
       // Mobs that give no experience any more are no reason to wait.
       const outleveled = !g.map.camps.some((c) => !window.__mobs[c.kind].elite && window.__mobs[c.kind].levels[1] > p.level - 5);
       const ready = !qDef || !qDef.elite || p.level >= 30 || outleveled || (p.level >= qDef.levels[0] - (qDef.boss ? 0 : 2) && eliteFails < 2);
-      const want = qKind && ready ? qKind : grindKind();
+      let want = qKind && ready ? qKind : grindKind();
+      // In a dungeon, fight forward along the path (north).
+      if (g.map.dungeon) want = g.units.filter((u) => !u.dead && !window.__mobs[u.kind].summon).sort((a, b) => b.home.z - a.home.z)[0]?.kind ?? want;
       const threatened = g.units.some((u) => !u.dead && u.target === pl());
       if (!threatened && pl().hp < pl().maxHp * 0.85) { g.update(DT); continue; }
       // Give up on a target we cannot seem to hurt (e.g. stuck behind scenery).
@@ -223,8 +258,10 @@ async function play([cls, spec]) {
         engagedAt = g.now;
         engaged = threatened ? g.units.find((u) => !u.dead && u.target === pl()) : cands[0] ?? null;
         // Everything here is dead: walk away so the camp can respawn.
-        if (!engaged) teleport(g.map.spawn.x, g.map.spawn.z);
-        if (engaged && engaged.distTo(pl()) > 60) {
+        if (!engaged && !g.map.dungeon) teleport(g.map.spawn.x, g.map.spawn.z);
+        // In dungeons, walk there (with the party) instead of teleporting.
+        if (engaged && g.map.dungeon) engagedAt = g.now;
+        if (engaged && engaged.distTo(pl()) > 60 && !g.map.dungeon) {
           const hub = g.map.zones[0];
           const dx = hub.x - engaged.pos.x, dz = hub.z - engaged.pos.z; const d = Math.hypot(dx, dz);
           teleport(engaged.pos.x + (dx / d) * 14, engaged.pos.z + (dz / d) * 14);
@@ -260,7 +297,7 @@ async function play([cls, spec]) {
     const p = P();
     if (p.completed.includes('ss_azhkar')) log.push(`${g.map.name} done at ${Math.round(g.now / 60)}m (+${Math.round((g.now - actStart) / 60)}m), level ${p.level}, deaths ${actDeaths}`);
     return {
-      minutes: Math.round(g.now / 60), level: p.level, deaths, done: p.completed.includes('ss_azhkar'), log,
+      minutes: Math.round(g.now / 60), level: p.level, deaths, done: p.completed.includes('ss_azhkar') && !dungeonFail && p.dungeons.length === 3, log,
       gear: Object.values(p.gear).filter(Boolean).map((i) => `${i.name}(${i.ilvl})`).slice(0, 4),
       talents: Object.values(p.talents).reduce((a, b) => a + b, 0),
     };
@@ -276,6 +313,7 @@ const PRELOAD = `
   import('/src/data/quests.ts').then((m) => { window.__quests = m.QUEST_BY_ID; });
   import('/src/data/world.ts').then((m) => { window.__mobs = m.MOBS; });
   import('/src/game/rules.ts').then((m) => { window.__upgrade = m.upgradeValue; });
+  import('/src/data/dungeons.ts').then((m) => { window.__dungeonFor = Object.fromEntries(Object.entries(m.DUNGEONS).map(([id, d]) => [d.act, id])); });
 `;
 const origNewContext = browser.newContext.bind(browser);
 browser.newContext = async (opts) => {

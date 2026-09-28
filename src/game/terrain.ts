@@ -75,7 +75,7 @@ export class Terrain {
   private rough: { x: number; z: number } | null;
 
   constructor(readonly map: MapDef) {
-    this.seed = map.id === 'vale' ? 0 : map.id === 'frostmarch' ? 17 : 31;
+    this.seed = hashSeed(map.id);
     const hub = map.zones[0];
     this.flats = [
       { x: hub.x, z: hub.z, r: 34, h: 0.6 },
@@ -117,8 +117,11 @@ export class Terrain {
       const ld = Math.hypot(x - lake.x, z - lake.z);
       h -= (1 - smoothstep(lake.r * 0.3, lake.r, ld)) * 5;
     }
-    const roadW = 1 - smoothstep(3, 9, this.roadDistance(x, z));
+    const rd = this.roadDistance(x, z);
+    const roadW = 1 - smoothstep(3, 9, rd);
     h = h * (1 - roadW * 0.75);
+    // Dungeons: steep walls on both sides of the path.
+    if (this.map.theme.canyon) h += smoothstep(15, 28, rd) * 32;
     for (const f of this.flats) {
       const w = 1 - smoothstep(f.r * 0.6, f.r, Math.hypot(x - f.x, z - f.z));
       h = h + (f.h - h) * w;
@@ -167,4 +170,11 @@ export class Terrain {
     }
     return best;
   }
+}
+
+function hashSeed(id: string): number {
+  if (id === 'vale') return 0;
+  let h = 7;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) % 997;
+  return h;
 }

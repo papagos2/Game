@@ -3,7 +3,8 @@ import type { ClassId } from './data/classes';
 import { play, setSoundEnabled, unlockAudio } from './game/audio';
 import { Game, type Quality } from './game/game';
 import { acceptQuest, deleteSave, loadGame, newProgress, questsForNpc, rankUp, saveGame, type Progress } from './game/progress';
-import { MAPS, type MapId } from './data/world';
+import { MAPS, type WorldId } from './data/world';
+import { worldDef } from './data/dungeons';
 import { Hud } from './ui/hud';
 import { Input } from './ui/input';
 import { Panels, classSelect, closeScreens, loadSetting, titleScreen } from './ui/screens';
@@ -38,7 +39,7 @@ function resume() {
   if (game && !game.player.dead) game.paused = false;
 }
 
-function startGame(progress: Progress) {
+function startGame(progress: Progress, world?: WorldId) {
   closeScreens();
   hudEl.hidden = false;
   game = new Game(canvas, {
@@ -67,7 +68,11 @@ function startGame(progress: Progress) {
       panels?.actComplete(map, unlocked);
     },
     specReady: () => undefined,
-  }, progress, input, defaultQuality());
+    dungeonComplete: (map, first) => {
+      pause();
+      panels?.dungeonComplete(map, first);
+    },
+  }, progress, input, defaultQuality(), world);
   panels = new Panels(game, resume, quitToTitle, travel);
   hud = new Hud(game, {
     bag: () => { pause(); panels!.bag(); },
@@ -106,16 +111,21 @@ function quitToTitle() {
 }
 
 /** Moves the hero to another map (a fresh world is built). */
-function travel(map: MapId) {
-  if (!game || !game.progress.unlocked.includes(map)) return;
+function travel(target: WorldId) {
+  if (!game) return;
   const p = game.progress;
+  const def = worldDef(target);
+  if (!def || !p.unlocked.includes(def.act)) return;
+  if (def.dungeon && p.level < def.dungeon.minLevel) return;
   game.save();
-  p.mapId = map;
-  p.pos = { ...MAPS[map].spawn };
+  if (!def.dungeon) {
+    p.mapId = def.act;
+    p.pos = { ...def.spawn };
+  }
   saveGame(p);
   teardown();
-  startGame(p);
-  hud?.banner(MAPS[map].name, `${MAPS[map].subtitle} - levels ${MAPS[map].levels[0]}-${MAPS[map].levels[1]}`);
+  startGame(p, def.dungeon ? target : undefined);
+  hud?.banner(def.name, def.dungeon ? 'Dungeon - your party is with you' : `${def.subtitle} - levels ${def.levels[0]}-${def.levels[1]}`);
 }
 
 function showTitle() {

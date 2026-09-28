@@ -295,6 +295,7 @@ function buildHub(t: Terrain, root: THREE.Group, colliders: Collider[], glow: TH
   const map = t.map;
   const hub = hubPos(map);
   const theme = map.theme;
+  if (map.dungeon) return buildWaystone(t, root, colliders, glow);
   const houses: [number, number, number, number, number][] = [
     [-22, -15, 0.4, 7, 6], [22, -18, -0.3, 8, 6], [-26, 10, 1.3, 6, 6], [26, 12, -1.4, 7, 7],
     [-8, 26, 0.1, 9, 6], [12, 28, -0.1, 6, 5], [-34, -2, 1.6, 5, 5],
@@ -347,7 +348,13 @@ function buildHub(t: Terrain, root: THREE.Group, colliders: Collider[], glow: TH
     stall.position.set(vendor.x, t.heightAt(vendor.x, vendor.z), vendor.z);
     root.add(stall);
   }
-  // Waystone beside the Wayfinder: the portal between maps.
+  return buildWaystone(t, root, colliders, glow);
+}
+
+/** Waystone beside the Wayfinder: the portal between maps. */
+function buildWaystone(t: Terrain, root: THREE.Group, colliders: Collider[], glow: THREE.MeshStandardMaterial): THREE.Object3D | null {
+  const map = t.map;
+  for (const [dx, dz] of [[-6, -4], [6, -4]]) root.add(brazier(t, map.zones[0].x + dx, map.zones[0].z + dz, glow));
   const travel = map.npcs.find((n) => n.travel);
   if (!travel) return null;
   const stone = new THREE.Group();
@@ -377,7 +384,7 @@ function buildCamps(t: Terrain, root: THREE.Group, colliders: Collider[], glow: 
       buildBossLair(t, root, colliders, glow, camp.x, camp.z);
       continue;
     }
-    if (def.model !== 'humanoid') continue;
+    if (def.model !== 'humanoid' || map.dungeon) continue;
     for (let i = 0; i < 3; i++) {
       const a = rng() * Math.PI * 2;
       const r = 8 + rng() * 8;

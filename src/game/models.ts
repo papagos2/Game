@@ -369,6 +369,17 @@ export function buildPlayerModel(cls: ClassId, glow?: string): Rig {
   return rig;
 }
 
+/** Dungeon companions: a shield-bearer, a healer and a ranger. */
+export function buildCompanion(role: 'tank' | 'healer' | 'dps', color: string): Rig {
+  const rig = role === 'tank'
+    ? humanoid({ body: color, trim: '#c9d6ea', skin: '#d9a57e', weapon: 'sword', glow: '#bfe3ff', bulk: 1.25, cape: '#2a3a5a' })
+    : role === 'healer'
+      ? humanoid({ body: color, trim: '#ffd84a', skin: '#e0b48f', weapon: 'staff', glow: '#fff4b0', hood: true, cape: '#c8b070' })
+      : humanoid({ body: color, trim: '#a8c878', skin: '#c89370', weapon: 'crook', glow: '#b6e27a', cape: '#2a3a1a' });
+  collectMaterials(rig);
+  return rig;
+}
+
 export function buildNpcModel(color: string): Rig {
   const rig = humanoid({ body: color, trim: '#d8ccb0', skin: '#e0b48f', weapon: 'none' });
   collectMaterials(rig);
@@ -401,6 +412,44 @@ export function buildMobModel(def: MobDef): Rig {
       rig = humanoid({ body: def.color, trim: '#1a1210', skin: def.accent, weapon: 'staff', glow: def.accent, scale: 2.6 * def.scale, bulk: 1.3, horns: true, hood: def.kind === 'ysolde', cape: def.accent });
       break;
   }
+  collectMaterials(rig);
+  return rig;
+}
+
+/** A gathering node: a flowering herb or an ore-veined rock. */
+export function buildNode(kind: 'herb' | 'ore', color: string): THREE.Group {
+  const g = new THREE.Group();
+  const glow = new THREE.MeshBasicMaterial({ color });
+  if (kind === 'herb') {
+    const leaves = new THREE.Mesh(new THREE.IcosahedronGeometry(0.55, 0), mat('#3f7a34'));
+    leaves.scale.set(1, 0.6, 1);
+    leaves.position.y = 0.3;
+    g.add(leaves);
+    for (let i = 0; i < 4; i++) {
+      const f = new THREE.Mesh(new THREE.OctahedronGeometry(0.14, 0), glow);
+      const a = (i / 4) * Math.PI * 2;
+      f.position.set(Math.cos(a) * 0.35, 0.65, Math.sin(a) * 0.35);
+      g.add(f);
+    }
+  } else {
+    const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.8, 0), mat('#6a6560'));
+    rock.scale.set(1.1, 0.75, 1);
+    rock.position.y = 0.4;
+    g.add(rock);
+    for (let i = 0; i < 3; i++) {
+      const c = new THREE.Mesh(new THREE.OctahedronGeometry(0.2, 0), glow);
+      c.position.set((i - 1) * 0.35, 0.8 + (i % 2) * 0.15, 0.5 - i * 0.2);
+      g.add(c);
+    }
+  }
+  g.traverse((o) => (o.castShadow = true));
+  return g;
+}
+
+/** A riding mount, coloured to suit the class. */
+export function buildMount(cls: ClassId): Rig {
+  const c = cls === 'stormblade' ? ['#5a5a66', '#c9d6ea'] : cls === 'emberseer' ? ['#6a3a2a', '#f0c27a'] : ['#4a5a3a', '#d8c38f'];
+  const rig = quadruped(c[0], c[1], 1.55);
   collectMaterials(rig);
   return rig;
 }

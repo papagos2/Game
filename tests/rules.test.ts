@@ -318,3 +318,93 @@ describe('world', () => {
     for (const c of Object.keys(CLASSES) as ClassId[]) expect(abilitiesFor(c, null).length).toBe(4);
   });
 });
+
+describe('professions, reputation, bounties, achievements', () => {
+  it('gathering needs skill, raises it and counts', async () => {
+    const { gather, canGather } = await import('../src/game/economy');
+    const p = newProgress('G', 'stormblade');
+    expect(canGather(p, 'frostbloom')).toBe(false);
+    expect(gather(p, 'frostbloom', 0.5)).toBe(0);
+    for (let i = 0; i < 40; i++) gather(p, 'sunleaf', 0.1);
+    expect(p.gatherSkill).toBeGreaterThanOrEqual(60);
+    expect(canGather(p, 'frostbloom')).toBe(true);
+    expect(p.stats.gathered).toBeGreaterThanOrEqual(40);
+  });
+
+  it('crafting spends materials; elixirs raise stats; reforge raises item level', async () => {
+    const { craft, craftBlocker, buffMods } = await import('../src/game/economy');
+    const p = newProgress('C', 'emberseer');
+    expect(craftBlocker(p, 'draught')).toMatch(/herbs/);
+    p.materials = { sunleaf: 6, copper: 6 };
+    const pots = p.potions;
+    expect(craft(p, 'draught')).toMatch(/Draught/);
+    expect(p.potions).toBe(pots + 2);
+    p.gold = 100;
+    craft(p, 'mightElixir');
+    expect(buffMods(p).powerPct).toBe(12);
+    const base = playerStats('emberseer', 5, emptyGear());
+    const buffed = playerStats('emberseer', 5, emptyGear(), {}, buffMods(p));
+    expect(buffed.power).toBeGreaterThan(base.power);
+    const w = makeItem(makeRng(1), 'emberseer', 10, 2, 'weapon');
+    const before = w.power;
+    p.materials.copper = 10;
+    craft(p, 'reforge', w);
+    expect(w.ilvl).toBe(12);
+    expect(w.power).toBeGreaterThan(before);
+    p.playSeconds += 16 * 60;
+    expect(buffMods(p).powerPct).toBeUndefined();
+  });
+
+  it('reputation ranks and discounts', async () => {
+    const { addRep, repRank } = await import('../src/game/economy');
+    const p = newProgress('R', 'thornkeeper');
+    expect(repRank(0).name).toBe('Neutral');
+    expect(addRep(p, 'vale', 1200)).toBe('Friendly');
+    expect(repRank(p.rep.vale!).discount).toBeCloseTo(0.05);
+    addRep(p, 'vale', 20000);
+    expect(repRank(p.rep.vale!).name).toBe('Exalted');
+  });
+
+  it('daily bounties roll once a day and progress', async () => {
+    const { refreshBounties, onBountyKill, onBountyGather, claimableBounties } = await import('../src/game/economy');
+    const p = newProgress('B', 'stormblade');
+    refreshBounties(p, '2026-9-28');
+    expect(p.bounties.list.length).toBe(9);
+    const first = JSON.stringify(p.bounties.list);
+    refreshBounties(p, '2026-9-28');
+    expect(JSON.stringify(p.bounties.list)).toBe(first);
+    for (const b of p.bounties.list.filter((x) => x.map === 'vale')) {
+      for (let i = 0; i < b.count; i++) {
+        if (b.kind === 'kill') onBountyKill(p, 'vale', b.mob!);
+        else onBountyGather(p, 'vale', 1);
+      }
+    }
+    expect(claimableBounties(p, 'vale').length).toBe(3);
+    refreshBounties(p, '2026-9-29');
+    expect(p.bounties.day).toBe('2026-9-29');
+  });
+
+  it('achievements award once, with titles; extras survive a save', async () => {
+    const { checkAchievements, titles } = await import('../src/game/economy');
+    const p = newProgress('A', 'stormblade');
+    p.level = 10;
+    p.stats.kills = 120;
+    const got = checkAchievements(p).map((a) => a.id);
+    expect(got).toContain('lvl10');
+    expect(got).toContain('kill100');
+    expect(checkAchievements(p).length).toBe(0);
+    p.completed.push('cindermaw');
+    checkAchievements(p);
+    expect(titles(p)).toContain('of the Vale');
+    p.title = 'of the Vale';
+    p.materials = { copper: 3 };
+    p.rep = { vale: 1500 };
+    const back = parseSave(JSON.stringify(p))!;
+    expect(back.title).toBe('of the Vale');
+    expect(back.materials.copper).toBe(3);
+    expect(back.rep.vale).toBe(1500);
+    expect(back.achievements).toEqual(p.achievements);
+    // A title you have not earned is dropped.
+    expect(parseSave(JSON.stringify({ ...p, title: 'the Legendary' }))!.title).toBeNull();
+  });
+});
