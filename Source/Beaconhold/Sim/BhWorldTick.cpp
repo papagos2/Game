@@ -10,7 +10,7 @@ namespace
 constexpr float TickLeashDistance = 9.f;
 constexpr float TickChaseGiveUp = 8.f;
 constexpr float TickTurnRate = 12.f;
-constexpr int TickPathBudget = 32;
+constexpr int TickPathBudget = 16; // path searches per tick: bounds the spike when a big army is ordered at once
 } // namespace
 
 void World::Tick(float Dt)

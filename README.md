@@ -133,6 +133,8 @@ All optional; none is needed to build or play the game.
   play every mission and difficulty with several army strategies and prints win rates, times,
   losses, lulls, stuck units and invariant violations (drop `--brief` for full telemetry). Every
   two game minutes it also saves, restores and compares the mission (suspend and resume).
+  `--bench` instead times every simulation tick of each run and of a worst-case battle, plus the
+  per-frame presentation work (HUD model, unit poses, minimap), in this machine's milliseconds.
 - **Unreal layer compile check** without the engine (Python 3 and clang, or `CXX=g++`):
   `python3 Tools/UEStubs/check.py`. It catches type errors, missing includes, file name clashes
   and wrong format strings; it cannot prove the Unreal API matches, only a real build can.

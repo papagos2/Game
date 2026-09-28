@@ -266,6 +266,9 @@ class World
 public:
 	static constexpr float TickSeconds = 0.05f;
 	static constexpr int MaxEntities = 3000;
+	// No unit is wider than this (a Bog Titan is 0.8): spatial queries look this far past their
+	// range for unit centres. Checked by a test against the unit table.
+	static constexpr float MaxUnitRadius = 1.f;
 
 	World();
 
@@ -427,7 +430,6 @@ private:
 	int HashW = 0;
 	int HashH = 0;
 	std::vector<std::vector<EntityId>> Hash;
-	mutable std::vector<EntityId> Scratch;
 };
 
 const char* AvailabilityText(Availability A);

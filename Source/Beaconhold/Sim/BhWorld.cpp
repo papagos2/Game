@@ -330,34 +330,31 @@ void World::QueryRadius(const Vec2& P, float R, std::vector<EntityId>& Out) cons
 	{
 		return;
 	}
+	// Units are filed under the cell of their centre, so look one largest unit radius further;
+	// buildings are filed under every cell they cover. Filtering comes first and only what is in
+	// range gets sorted: the result stays in id order, which keeps the simulation deterministic.
 	const float Cell = static_cast<float>(HashCell);
-	const int CX0 = ClampI(static_cast<int>(std::floor((P.X - R - 2.f) / Cell)), 0, HashW - 1);
-	const int CY0 = ClampI(static_cast<int>(std::floor((P.Y - R - 2.f) / Cell)), 0, HashH - 1);
-	const int CX1 = ClampI(static_cast<int>(std::floor((P.X + R + 2.f) / Cell)), 0, HashW - 1);
-	const int CY1 = ClampI(static_cast<int>(std::floor((P.Y + R + 2.f) / Cell)), 0, HashH - 1);
-	Scratch.clear();
+	const float Reach = R + MaxUnitRadius;
+	const int CX0 = ClampI(static_cast<int>(std::floor((P.X - Reach) / Cell)), 0, HashW - 1);
+	const int CY0 = ClampI(static_cast<int>(std::floor((P.Y - Reach) / Cell)), 0, HashH - 1);
+	const int CX1 = ClampI(static_cast<int>(std::floor((P.X + Reach) / Cell)), 0, HashW - 1);
+	const int CY1 = ClampI(static_cast<int>(std::floor((P.Y + Reach) / Cell)), 0, HashH - 1);
 	for (int CY = CY0; CY <= CY1; ++CY)
 	{
 		for (int CX = CX0; CX <= CX1; ++CX)
 		{
-			const std::vector<EntityId>& Bucket = Hash[static_cast<size_t>(CY * HashW + CX)];
-			Scratch.insert(Scratch.end(), Bucket.begin(), Bucket.end());
+			for (EntityId Id : Hash[static_cast<size_t>(CY * HashW + CX)])
+			{
+				const Entity* E = Find(Id);
+				if (E != nullptr && E->bAlive && EdgeDistanceToPoint(*E, P) <= R)
+				{
+					Out.push_back(Id);
+				}
+			}
 		}
 	}
-	std::sort(Scratch.begin(), Scratch.end());
-	Scratch.erase(std::unique(Scratch.begin(), Scratch.end()), Scratch.end());
-	for (EntityId Id : Scratch)
-	{
-		const Entity* E = Find(Id);
-		if (E == nullptr || !E->bAlive)
-		{
-			continue;
-		}
-		if (EdgeDistanceToPoint(*E, P) <= R)
-		{
-			Out.push_back(Id);
-		}
-	}
+	std::sort(Out.begin(), Out.end());
+	Out.erase(std::unique(Out.begin(), Out.end()), Out.end()); // buildings span several cells
 }
 
 float World::EdgeDistanceToPoint(const Entity& A, const Vec2& P)

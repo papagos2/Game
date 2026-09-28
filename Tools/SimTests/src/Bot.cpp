@@ -5,6 +5,7 @@
 
 #include "BhHud.h"
 
+#include <chrono>
 #include <cstdio>
 #include <map>
 
@@ -581,10 +582,13 @@ BotReport PlayMission(Session& S, const BotConfig& Config, float MaxSeconds, Tel
 	}
 	while (W.GetTime() < MaxSeconds && S.GetMission().Outcome == MissionOutcome::InProgress)
 	{
+		const auto Start = std::chrono::steady_clock::now();
 		S.Update(World::TickSeconds, nullptr);
+		const float Ms = std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - Start).count();
 		S.TakeEvents(Events);
 		if (Observer != nullptr)
 		{
+			Observer->OnTickTime(S, Ms);
 			Observer->OnTick(S, Events);
 		}
 		if (S.GetMission().IsTutorialActive())

@@ -425,7 +425,7 @@ const char* CheckEntity(const Entity& E, const SaveCheck& C, uint32_t NextId)
 			return "entity timer";
 		}
 	}
-	if (!InRange(E.Radius, 0.f, 4.f) || !InRange(E.MaxHp, 0.001f, 1e6f) || !InRange(E.Hp, -1e6f, 1e6f) || !InRange(E.BuildProgress, 0.f, 1.f))
+	if (!InRange(E.Radius, 0.f, E.IsUnit() ? World::MaxUnitRadius : 4.f) || !InRange(E.MaxHp, 0.001f, 1e6f) || !InRange(E.Hp, -1e6f, 1e6f) || !InRange(E.BuildProgress, 0.f, 1.f))
 	{
 		return "entity health";
 	}

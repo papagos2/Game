@@ -4,6 +4,7 @@
 #include "BhHud.h"
 #include "BhSerialize.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 
@@ -162,6 +163,29 @@ void Telemetry::OnTick(const Session& S, const std::vector<GameEvent>& Events)
 		LastSampleTime = Now;
 		NextSample = Now + 1.f;
 	}
+}
+
+void Telemetry::OnTickTime(const Session& S, float Ms)
+{
+	TickMs.push_back(Ms);
+	if (Ms > WorstTickMs)
+	{
+		WorstTickMs = Ms;
+		WorstTickAt = S.GetWorld().GetTime();
+		WorstTickUnits = S.GetWorld().CountUnits(Team::Player, false) + S.GetWorld().CountUnits(Team::Enemy, false);
+	}
+}
+
+float Telemetry::TickPercentile(float P) const
+{
+	if (TickMs.empty())
+	{
+		return 0.f;
+	}
+	std::vector<float> Sorted = TickMs;
+	const size_t At = MinI(static_cast<int>(Sorted.size()) - 1, static_cast<int>(P * static_cast<float>(Sorted.size())));
+	std::nth_element(Sorted.begin(), Sorted.begin() + static_cast<std::ptrdiff_t>(At), Sorted.end());
+	return Sorted[At];
 }
 
 void Telemetry::Sample(const Session& S, float Dt)

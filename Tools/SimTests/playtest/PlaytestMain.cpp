@@ -2,17 +2,22 @@
 // telemetry reports pacing, economy, unit balance and simulation health for each run, then a
 // one-line-per-run table.
 //
-// Usage: bhplaytest [filter] [--brief] [--seeds N]
+// Usage: bhplaytest [filter] [--brief] [--seeds N] [--bench]
 //   filter   only runs whose name contains it (e.g. "heart", "dusk/hard", "riders")
 //   --brief  only the table
 //   --seeds  games per run with different random seeds (default 3; seed 0 is the game's own)
+//   --bench  CPU cost of every simulation tick (this machine's milliseconds) for each run and a
+//            worst-case battle, instead of the gameplay table
 #include "Bot.h"
 #include "Playtest.h"
 
 #include "BhHud.h"
 #include "BhMissions.h"
+#include "BhPainter.h"
+#include "BhRender.h"
 #include "BhSession.h"
 
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -95,17 +100,185 @@ std::vector<Run> BuildRuns()
 	return Runs;
 }
 
+const Entity* FindFirst(const World& W, Archetype A)
+{
+	for (const Entity& E : W.GetEntities())
+	{
+		if (E.bAlive && E.Type == A)
+		{
+			return &E;
+		}
+	}
+	return nullptr;
+}
+
+// Game-thread work the Unreal layer does with the simulation's own code: the HUD model and every
+// entity's pose each frame, the minimap overlay five times a second and its base every 2 s.
+struct FrameCost
+{
+	struct Item
+	{
+		double Sum = 0.0;
+		float Max = 0.f;
+		int Count = 0;
+		void Add(float Ms)
+		{
+			Sum += static_cast<double>(Ms);
+			Max = Ms > Max ? Ms : Max;
+			++Count;
+		}
+	};
+	Item Hud;
+	Item Poses;
+	Item Overlay;
+	Item Base;
+	int PeakEntities = 0;
+
+	template <typename Fn>
+	static float Time(Fn&& F)
+	{
+		const auto Start = std::chrono::steady_clock::now();
+		F();
+		return std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - Start).count();
+	}
+
+	void Measure(const Session& S, float Now)
+	{
+		HudModel Model;
+		Hud.Add(Time([&]() { BuildHudModel(S, Model); }));
+		int Count = 0;
+		Poses.Add(Time([&]()
+		{
+			for (const Entity& E : S.GetWorld().GetEntities())
+			{
+				AnimInput In;
+				In.Type = E.Type;
+				In.Owner = E.Owner;
+				In.Act = E.Act;
+				In.Buff = E.Buff;
+				In.Carry = E.CarryAmount > 0 ? E.CarryType : Resource::None;
+				In.bMoving = E.Act == Activity::Walking || E.Act == Activity::Carrying;
+				In.bConstructed = E.bConstructed;
+				In.BuildProgress = E.BuildProgress;
+				In.Time = Now;
+				In.Seed = E.Id;
+				EvaluateEntityPose(In);
+				for (int R = 1; R < NumPartRoles; ++R)
+				{
+					EvaluateRolePose(static_cast<PartRole>(R), In);
+				}
+				++Count;
+			}
+		}));
+		PeakEntities = Count > PeakEntities ? Count : PeakEntities;
+		ImageRGBA BaseImage;
+		Base.Add(Time([&]() { PaintMinimap(S.GetWorld().GetMap(), 2, BaseImage); }));
+		const Vec2 View[4] = {Vec2(10.f, 10.f), Vec2(30.f, 10.f), Vec2(30.f, 22.f), Vec2(10.f, 22.f)};
+		ImageRGBA Image;
+		Overlay.Add(Time([&]() { PaintMinimapOverlay(S, BaseImage, 2, View, true, {}, Image); }));
+	}
+
+	void Print() const
+	{
+		auto Row = [](const char* Name, const Item& I)
+		{
+			std::printf("%-34s %7d %8.3f %8s %8s %8.3f\n", Name, I.Count, I.Count > 0 ? static_cast<float>(I.Sum / I.Count) : 0.f, "", "", I.Max);
+		};
+		std::printf("\ngame-thread presentation work (same units; up to %d entities):\n", PeakEntities);
+		Row("frame/hud model (every frame)", Hud);
+		Row("frame/all poses (every frame)", Poses);
+		Row("frame/minimap overlay (5 a second)", Overlay);
+		Row("frame/minimap base (every 2 s)", Base);
+	}
+};
+
+// The worst the rules allow at once: a full Warden army (supply 100) against the Gloam's army cap
+// and a wave on top, all fighting across the Heart map while the enemy commander plays on.
+void StressBattle(Telemetry& T, int Wardens, int Gloam, float Seconds, FrameCost* Frame = nullptr)
+{
+	Session S;
+	SessionConfig C;
+	C.MissionIndex = 2;
+	C.bTutorial = false;
+	std::string Err;
+	if (!S.Start(C, Err))
+	{
+		return;
+	}
+	World& W = S.GetWorld();
+	const Entity* Heart = FindFirst(W, Archetype::GloamHeart);
+	const Vec2 Keep = S.GetKeepPos();
+	const Vec2 Home = Heart != nullptr ? Heart->Pos : Keep + Vec2(20.f, -20.f);
+	const Archetype WardenTypes[] = {Archetype::Shieldbearer, Archetype::Ranger, Archetype::StagRider, Archetype::Sage, Archetype::Shieldbearer};
+	const Archetype GloamTypes[] = {Archetype::Gloomling, Archetype::Thornback, Archetype::Gloomling, Archetype::Hexer, Archetype::BogTitan};
+	std::vector<EntityId> Army;
+	std::vector<EntityId> Horde;
+	const Vec2 Towards = (Home - Keep).Normalized();
+	for (int I = 0; I < Wardens; ++I)
+	{
+		const Vec2 Offset = Towards * (4.f + static_cast<float>(I / 10) * 0.7f) + Vec2(-Towards.Y, Towards.X) * (static_cast<float>(I % 10) - 4.5f) * 0.7f;
+		Army.push_back(W.SpawnUnit(WardenTypes[I % 5], Team::Player, Keep + Offset));
+	}
+	for (int I = 0; I < Gloam; ++I)
+	{
+		const Vec2 Offset = Towards * -(4.f + static_cast<float>(I / 10) * 0.7f) + Vec2(-Towards.Y, Towards.X) * (static_cast<float>(I % 10) - 4.5f) * 0.7f;
+		Horde.push_back(W.SpawnUnit(GloamTypes[I % 5], Team::Enemy, Home + Offset));
+	}
+	T.Begin(S);
+	std::vector<GameEvent> Events;
+	float NextOrder = 0.f;
+	while (W.GetTime() < Seconds && S.GetMission().Outcome == MissionOutcome::InProgress)
+	{
+		if (W.GetTime() >= NextOrder)
+		{
+			// Both sides keep pushing into each other (fresh paths for everyone at once).
+			NextOrder = W.GetTime() + 15.f;
+			W.CmdMove(Army, Home, true);
+			W.CmdMove(Horde, Keep, true);
+		}
+		const auto Start = std::chrono::steady_clock::now();
+		S.Update(World::TickSeconds, nullptr);
+		const float Ms = std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - Start).count();
+		S.TakeEvents(Events);
+		T.OnTickTime(S, Ms);
+		T.OnTick(S, Events);
+		if (Frame != nullptr && T.TickMs.size() % 10 == 0)
+		{
+			Frame->Measure(S, W.GetTime());
+		}
+	}
+	T.End(S);
+}
+
+void PrintCpuRow(const char* Name, const Telemetry& T)
+{
+	double Sum = 0.0;
+	for (float Ms : T.TickMs)
+	{
+		Sum += static_cast<double>(Ms);
+	}
+	const float Avg = T.TickMs.empty() ? 0.f : static_cast<float>(Sum / static_cast<double>(T.TickMs.size()));
+	std::printf("%-34s %7zu %8.3f %8.3f %8.3f %8.3f  at %s with %d units\n", Name, T.TickMs.size(), Avg, T.TickPercentile(0.99f), T.TickPercentile(0.999f),
+		T.WorstTickMs, FormatTime(T.WorstTickAt).c_str(), T.WorstTickUnits);
+}
+
 } // namespace
 
 int main(int Argc, char** Argv)
 {
 	const char* Filter = nullptr;
 	bool bBrief = false;
+	bool bBench = false;
 	int Seeds = 3;
 	for (int I = 1; I < Argc; ++I)
 	{
 		if (std::strcmp(Argv[I], "--brief") == 0)
 		{
+			bBrief = true;
+		}
+		else if (std::strcmp(Argv[I], "--bench") == 0)
+		{
+			bBench = true;
 			bBrief = true;
 		}
 		else if (std::strcmp(Argv[I], "--seeds") == 0 && I + 1 < Argc)
@@ -136,6 +309,10 @@ int main(int Argc, char** Argv)
 	};
 	std::vector<Row> Rows;
 	int Failures = 0;
+	if (bBench)
+	{
+		std::printf("%-34s %7s %8s %8s %8s %8s  (milliseconds per simulation tick on this machine)\n", "run", "ticks", "avg", "p99", "p99.9", "max");
+	}
 	for (const Run& R : BuildRuns())
 	{
 		if (Filter != nullptr && R.Name.find(Filter) == std::string::npos)
@@ -165,6 +342,10 @@ int main(int Argc, char** Argv)
 			{
 				std::printf("== %s (seed %d)\n%s", R.Name.c_str(), Seed, T.Summary().c_str());
 			}
+			if (bBench)
+			{
+				PrintCpuRow((R.Name + " #" + std::to_string(Seed)).c_str(), T);
+			}
 			Failures += static_cast<int>(T.Violations.size());
 			const TeamState& P = S.GetWorld().GetTeam(Team::Player);
 			++Rw.Runs;
@@ -181,6 +362,19 @@ int main(int Argc, char** Argv)
 			Rw.PeakUnits = T.PeakPlayerUnits + T.PeakEnemyUnits > Rw.PeakUnits ? T.PeakPlayerUnits + T.PeakEnemyUnits : Rw.PeakUnits;
 		}
 		Rows.push_back(Rw);
+	}
+	if (bBench)
+	{
+		// Worst cases: armies at the supply and army caps meet head on; then twice that.
+		Telemetry Cap;
+		FrameCost Frame;
+		StressBattle(Cap, 80, 60, 180.f, &Frame);
+		PrintCpuRow("stress/140-units", Cap);
+		Telemetry Double;
+		StressBattle(Double, 160, 120, 120.f);
+		PrintCpuRow("stress/280-units (beyond the caps)", Double);
+		Frame.Print();
+		return Failures > 0 ? 1 : 0;
 	}
 	std::printf("\n%-34s %5s %5s %7s %7s %5s %5s %5s %6s %5s %4s %5s\n", "run", "won", "lost", "avg", "max", "stars", "died", "kills", "lull", "stuck", "bad",
 		"units");

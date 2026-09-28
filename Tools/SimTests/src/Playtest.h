@@ -58,6 +58,8 @@ public:
 	void Begin(const bh::Session& S);
 	// Call after every simulation tick with the events that tick produced.
 	void OnTick(const bh::Session& S, const std::vector<bh::GameEvent>& Events);
+	// Wall-clock cost of one simulation tick (world, mission script, enemy AI).
+	void OnTickTime(const bh::Session& S, float Ms);
 	void End(const bh::Session& S);
 
 	// ---------------------------------------------------------------- Results
@@ -92,6 +94,13 @@ public:
 	std::vector<StuckIncident> Stuck;
 	std::vector<std::string> Violations;
 	int SaveChecks = 0; // suspend saves written, restored and compared
+
+	// CPU (milliseconds per simulation tick on this machine).
+	std::vector<float> TickMs;
+	float WorstTickMs = 0.f;
+	float WorstTickAt = 0.f;
+	int WorstTickUnits = 0;
+	float TickPercentile(float P) const;
 	int PeakPlayerUnits = 0;
 	int PeakEnemyUnits = 0;
 	int PeakEntities = 0;

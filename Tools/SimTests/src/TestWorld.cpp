@@ -4,6 +4,8 @@
 #include "BhPath.h"
 #include "BhWorld.h"
 
+#include <algorithm>
+
 using namespace bh;
 
 namespace
@@ -76,6 +78,35 @@ BH_TEST(Path_UnreachableGivesPartial)
 	BH_EXPECT(!bReached);
 	BH_EXPECT(!Path.empty());
 	BH_EXPECT(Path.back().X < 10.f);
+}
+
+BH_TEST(World_SpatialQueryReachesEveryUnit)
+{
+	// Spatial queries rely on no unit being wider than MaxUnitRadius; a unit whose edge is in
+	// range must be found wherever its centre sits in the grid.
+	for (int A = 0; A < NumArchetypes; ++A)
+	{
+		const ArchetypeDef& D = GetDef(static_cast<Archetype>(A));
+		BH_EXPECT_MSG(D.Kind != EntityKind::Unit || D.Radius <= World::MaxUnitRadius, "%s is wider than MaxUnitRadius", D.Name);
+	}
+	World W;
+	W.Reset(32, 32, 1u);
+	const EntityId Titan = W.SpawnUnit(Archetype::BogTitan, Team::Enemy, Vec2(10.95f, 10.95f));
+	W.Tick(World::TickSeconds);
+	const Entity* T = W.Find(Titan);
+	BH_EXPECT(T != nullptr);
+	if (T == nullptr)
+	{
+		return;
+	}
+	std::vector<EntityId> Near;
+	for (int I = 0; I < 16; ++I)
+	{
+		const float Angle = static_cast<float>(I) * 0.3927f;
+		const Vec2 From = T->Pos + Vec2::FromAngle(Angle) * (T->Radius + 2.95f);
+		W.QueryRadius(From, 3.f, Near);
+		BH_EXPECT_MSG(std::find(Near.begin(), Near.end(), Titan) != Near.end(), "the Titan's edge is in range from angle %d but was not found", I);
+	}
 }
 
 BH_TEST(World_UnitMovesToPoint)
