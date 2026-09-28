@@ -52,6 +52,9 @@ struct ActionId
 	bool operator!=(const ActionId& O) const { return !(*this == O); }
 };
 
+// Finger-sized pick tolerance, as a fraction of the screen height (about 3.5 mm on a phone).
+constexpr float PickRadiusScreen = 0.05f;
+
 // Does this action match a tutorial highlight id such as "train:Lamplighter" or "army"?
 bool ActionMatchesHighlight(const ActionId& A, const char* Highlight);
 
@@ -95,6 +98,7 @@ struct PickResult
 	PickKind Kind = PickKind::None;
 	EntityId Id = NoEntity;
 	Tile T;
+	bool bNearMiss = false; // a unit picked by the finger tolerance, beside its drawn body
 };
 
 // Notice codes carried by EventType::Notice (Sub).
@@ -137,11 +141,16 @@ public:
 	std::vector<EntityId> SelectedWorkers(const World& W) const;
 	std::vector<EntityId> SelectedNonWorkers(const World& W) const;
 
+	// What is at ground point P (units within Tolerance tiles, buildings under it, trees, sites).
 	PickResult PickAt(const World& W, const Vec2& P, float Tolerance) const;
+	// What the player sees under screen point X,Y: units and buildings are hit on their drawn
+	// body (a tower is picked by its top, not only by the ground under it), with a finger-sized
+	// tolerance; trees and Beacon sites by the ground point.
+	PickResult PickOnScreen(const World& W, const IViewProjector& View, float X, float Y, const Vec2& Ground) const;
 
-	// Touch/mouse intents.
-	void TapWorld(World& W, const Vec2& P, float Tolerance, bool bDouble, const IViewProjector* View);
-	void CommandAt(World& W, const Vec2& P, float Tolerance);
+	// Touch/mouse intents. With a view and the screen point, picking happens on screen.
+	void TapWorld(World& W, const Vec2& P, float Tolerance, bool bDouble, const IViewProjector* View, const Vec2* Screen = nullptr);
+	void CommandAt(World& W, const Vec2& P, float Tolerance, const IViewProjector* View = nullptr, const Vec2* Screen = nullptr);
 	void BoxSelect(World& W, float X0, float Y0, float X1, float Y1, const IViewProjector& View);
 	void Execute(World& W, CameraRig& Camera, const ActionId& A);
 
@@ -158,6 +167,7 @@ public:
 	int CountIdleWorkers(const World& W) const;
 
 private:
+	PickResult PickGroundFeature(const World& W, const Vec2& P) const;
 	void Latch(const World& W);
 	void SmartCommand(World& W, const PickResult& Pick, const Vec2& P);
 	bool SnapBeacon(const World& W, const Vec2& Near, Tile& Out) const;

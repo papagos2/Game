@@ -1,7 +1,10 @@
 // Beaconhold simulation core - player control.
 #include "BhControl.h"
 
+#include "BhVisuals.h"
+
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 
 namespace bh
@@ -64,8 +67,8 @@ bool ActionMatchesHighlight(const ActionId& A, const char* Highlight)
 	{
 		return true;
 	}
-	// "place:X" also lights up the Build button that leads to it.
-	return A.Kind == ActionKind::BuildMenu && std::strncmp(Highlight, "place:", 6) == 0;
+	// "place:X" also lights up the Build button that leads to it and the Place button that ends it.
+	return (A.Kind == ActionKind::BuildMenu || A.Kind == ActionKind::ConfirmPlacement) && std::strncmp(Highlight, "place:", 6) == 0;
 }
 
 void PlayerControl::Reset()
@@ -302,6 +305,12 @@ PickResult PlayerControl::PickAt(const World& W, const Vec2& P, float Tolerance)
 	{
 		return R;
 	}
+	return PickGroundFeature(W, P);
+}
+
+PickResult PlayerControl::PickGroundFeature(const World& W, const Vec2& P) const
+{
+	PickResult R;
 	const Tile T = Tile::FromPos(P);
 	const GameMap& Map = W.GetMap();
 	if (Map.InBounds(T))
@@ -379,16 +388,140 @@ void PlayerControl::SmartCommand(World& W, const PickResult& Pick, const Vec2& P
 	W.CmdMove(All, P, true);
 }
 
-void PlayerControl::TapWorld(World& W, const Vec2& P, float Tolerance, bool bDouble, const IViewProjector* View)
+PickResult PlayerControl::PickOnScreen(const World& W, const IViewProjector& View, float X, float Y, const Vec2& Ground) const
+{
+	const float Tol = PickRadiusScreen * MaxF(1.f, View.GetScreenHeight());
+	EntityId BestUnit = NoEntity;
+	float BestUnitScore = 1e9f;
+	float BestUnitFeetY = 0.f;
+	EntityId BestBuilding = NoEntity;
+	float BestBuildingFront = -1e9f;
+	float BestBuildingNearEdge = 0.f; // screen Y of the building's footprint edge nearest the camera
+	for (const Entity& E : W.GetEntities())
+	{
+		if (!E.bAlive)
+		{
+			continue;
+		}
+		const ModelDef& M = GetModel(E.Type);
+		const float Top = MaxF(0.2f, M.Height * M.Scale);
+		if (E.IsUnit())
+		{
+			// A vertical capsule from the feet to the head, as wide as the drawn unit.
+			float FX = 0.f;
+			float FY = 0.f;
+			float HX = 0.f;
+			float HY = 0.f;
+			if (!View.WorldToScreen(E.Pos, 0.f, FX, FY) || !View.WorldToScreen(E.Pos, Top, HX, HY))
+			{
+				continue;
+			}
+			float RX = 0.f;
+			float RY = 0.f;
+			float RadiusPx = 0.f;
+			if (View.WorldToScreen(E.Pos + Vec2(MaxF(E.Radius, M.ShadowRadius) * M.Scale, 0.f), 0.f, RX, RY))
+			{
+				RadiusPx = std::sqrt((RX - FX) * (RX - FX) + (RY - FY) * (RY - FY));
+			}
+			const float SegX = HX - FX;
+			const float SegY = HY - FY;
+			const float LenSq = SegX * SegX + SegY * SegY;
+			const float T = LenSq > 1e-6f ? ClampF(((X - FX) * SegX + (Y - FY) * SegY) / LenSq, 0.f, 1.f) : 0.f;
+			const float DX = X - (FX + SegX * T);
+			const float DY = Y - (FY + SegY * T);
+			const float Score = std::sqrt(DX * DX + DY * DY) - RadiusPx;
+			if (Score <= Tol && Score < BestUnitScore)
+			{
+				BestUnitScore = Score;
+				BestUnit = E.Id;
+				BestUnitFeetY = FY;
+			}
+			continue;
+		}
+		// Buildings and outcrops: the screen box of the footprint from the ground to the top.
+		float MinX = 1e9f;
+		float MinY = 1e9f;
+		float MaxX = -1e9f;
+		float MaxY = -1e9f;
+		float NearEdge = -1e9f;
+		bool bAny = false;
+		const Vec2 Corners[4] = {Vec2(static_cast<float>(E.Rect.X0), static_cast<float>(E.Rect.Y0)), Vec2(static_cast<float>(E.Rect.X1), static_cast<float>(E.Rect.Y0)),
+			Vec2(static_cast<float>(E.Rect.X0), static_cast<float>(E.Rect.Y1)), Vec2(static_cast<float>(E.Rect.X1), static_cast<float>(E.Rect.Y1))};
+		for (const Vec2& C : Corners)
+		{
+			for (int Level = 0; Level < 2; ++Level)
+			{
+				float SX = 0.f;
+				float SY = 0.f;
+				if (View.WorldToScreen(C, Level == 0 ? 0.f : Top, SX, SY))
+				{
+					MinX = MinF(MinX, SX);
+					MinY = MinF(MinY, SY);
+					MaxX = MaxF(MaxX, SX);
+					MaxY = MaxF(MaxY, SY);
+					if (Level == 0)
+					{
+						NearEdge = MaxF(NearEdge, SY);
+					}
+					bAny = true;
+				}
+			}
+		}
+		const float Margin = Tol * 0.25f;
+		if (!bAny || X < MinX - Margin || X > MaxX + Margin || Y < MinY - Margin || Y > MaxY + Margin)
+		{
+			continue;
+		}
+		// Where boxes overlap, the building standing in front (lower on screen) is the one seen.
+		float CX = 0.f;
+		float CY = 0.f;
+		if (View.WorldToScreen(E.Pos, 0.f, CX, CY) && CY > BestBuildingFront)
+		{
+			BestBuildingFront = CY;
+			BestBuilding = E.Id;
+			BestBuildingNearEdge = NearEdge;
+		}
+	}
+	PickResult R;
+	// A unit wins when the tap is on or right beside it and it stands in front of the building
+	// under the finger; a unit behind a building is hidden by it, so the building is the pick.
+	const bool bUnitInFront = BestUnitFeetY >= BestBuildingNearEdge - Tol * 0.25f;
+	if (BestUnit != NoEntity && (BestBuilding == NoEntity || (BestUnitScore <= Tol * 0.4f && bUnitInFront)))
+	{
+		R.Kind = PickKind::Entity;
+		R.Id = BestUnit;
+		R.bNearMiss = BestUnitScore > Tol * 0.4f;
+		return R;
+	}
+	if (BestBuilding != NoEntity)
+	{
+		R.Kind = PickKind::Entity;
+		R.Id = BestBuilding;
+		return R;
+	}
+	return PickGroundFeature(W, Ground);
+}
+
+void PlayerControl::TapWorld(World& W, const Vec2& P, float Tolerance, bool bDouble, const IViewProjector* View, const Vec2* Screen)
 {
 	if (bPlacing)
 	{
 		MovePlacement(W, P);
 		return;
 	}
-	const PickResult Pick = PickAt(W, P, Tolerance);
+	PickResult Pick = View != nullptr && Screen != nullptr ? PickOnScreen(W, *View, Screen->X, Screen->Y, P) : PickAt(W, P, Tolerance);
 	const bool bOwnUnits = HasOwnUnits(W);
 	const EntityId SelectedBuilding = GetSingleBuilding(W);
+	// With units selected, a tap beside (not on) one of our own units is a command to go there;
+	// otherwise a tap next to a clumped army selects one soldier and drops the rest.
+	if (Pick.bNearMiss && bOwnUnits && !bDouble)
+	{
+		const Entity* Near = W.Find(Pick.Id);
+		if (Near != nullptr && Near->Owner == Team::Player)
+		{
+			Pick = PickGroundFeature(W, P);
+		}
+	}
 
 	if (Pick.Kind == PickKind::Entity)
 	{
@@ -496,14 +629,14 @@ void PlayerControl::TapWorld(World& W, const Vec2& P, float Tolerance, bool bDou
 	}
 }
 
-void PlayerControl::CommandAt(World& W, const Vec2& P, float Tolerance)
+void PlayerControl::CommandAt(World& W, const Vec2& P, float Tolerance, const IViewProjector* View, const Vec2* Screen)
 {
 	if (bPlacing)
 	{
 		CancelPlacement();
 		return;
 	}
-	const PickResult Pick = PickAt(W, P, Tolerance);
+	const PickResult Pick = View != nullptr && Screen != nullptr ? PickOnScreen(W, *View, Screen->X, Screen->Y, P) : PickAt(W, P, Tolerance);
 	if (HasOwnUnits(W))
 	{
 		SmartCommand(W, Pick, P);

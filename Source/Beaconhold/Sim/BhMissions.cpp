@@ -70,9 +70,9 @@ std::vector<MissionDef> BuildMissions()
 			TutorialCond::GatherRes, Archetype::None, 1, Resource::Timber, MarkerKind::Tree, Archetype::None, "");
 		Step("Tap the Beacon Keep, then train a new Lamplighter.",
 			TutorialCond::HaveCount, Archetype::Lamplighter, 4, Resource::None, MarkerKind::OwnArch, Archetype::Keep, "train:Lamplighter");
-		Step("Every soldier needs a home. Select a Lamplighter, tap Build and place a Cottage.",
+		Step("Every soldier needs a home. Select a Lamplighter, tap Build, then Cottage. Drag the outline to a clear spot and tap Place.",
 			TutorialCond::HaveCount, Archetype::Cottage, 1, Resource::None, MarkerKind::None, Archetype::None, "place:Cottage");
-		Step("Now build a Muster Hall - it trains soldiers.",
+		Step("Now build a Muster Hall the same way - it trains soldiers.",
 			TutorialCond::HaveCount, Archetype::Barracks, 1, Resource::None, MarkerKind::None, Archetype::None, "place:Barracks");
 		Step("When the Muster Hall is finished, tap it and train 4 Shieldbearers or Rangers.",
 			TutorialCond::CombatUnits, Archetype::None, 4, Resource::None, MarkerKind::OwnArch, Archetype::Barracks, "train:Shieldbearer");

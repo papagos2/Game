@@ -193,7 +193,7 @@ bool Session::GetSelectionBox(float& X0, float& Y0, float& X1, float& Y1) const
 
 float Session::TapTolerance(const IViewProjector& View, float X, float Y) const
 {
-	const float Pixels = 30.f * MaxF(0.5f, View.GetScreenHeight() / 1080.f);
+	const float Pixels = PickRadiusScreen * MaxF(540.f, View.GetScreenHeight());
 	Vec2 A;
 	Vec2 B;
 	if (!View.ScreenToGround(X, Y, A) || !View.ScreenToGround(X + Pixels, Y, B))
@@ -208,7 +208,8 @@ void Session::MouseCommand(float X, float Y, const IViewProjector& View)
 	Vec2 P;
 	if (View.ScreenToGround(X, Y, P))
 	{
-		Control.CommandAt(TheWorld, P, TapTolerance(View, X, Y));
+		const Vec2 Screen(X, Y);
+		Control.CommandAt(TheWorld, P, TapTolerance(View, X, Y), &View, &Screen);
 	}
 }
 
@@ -256,7 +257,8 @@ void Session::RouteGesture(const GestureEvent& E, const IViewProjector& View)
 		Vec2 P;
 		if (View.ScreenToGround(E.X, E.Y, P))
 		{
-			Control.TapWorld(TheWorld, P, TapTolerance(View, E.X, E.Y), E.Type == GestureType::DoubleTap, &View);
+			const Vec2 Screen(E.X, E.Y);
+			Control.TapWorld(TheWorld, P, TapTolerance(View, E.X, E.Y), E.Type == GestureType::DoubleTap, &View, &Screen);
 		}
 		break;
 	}
@@ -269,6 +271,8 @@ void Session::RouteGesture(const GestureEvent& E, const IViewProjector& View)
 		{
 			const TileRect R = Control.PlacementRect().Expanded(1);
 			bDraggingPlacement = R.DistanceTo(Start) <= 0.01f;
+			// The ghost keeps the spot the finger grabbed instead of jumping its centre under it.
+			PlacementGrab = Control.PlacementRect().Center() - Start;
 		}
 		break;
 	}
@@ -279,7 +283,7 @@ void Session::RouteGesture(const GestureEvent& E, const IViewProjector& View)
 		{
 			if (View.ScreenToGround(E.X, E.Y, Cur))
 			{
-				Control.MovePlacement(TheWorld, Cur);
+				Control.MovePlacement(TheWorld, Cur + PlacementGrab);
 			}
 			break;
 		}

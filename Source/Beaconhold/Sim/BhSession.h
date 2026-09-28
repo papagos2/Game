@@ -94,6 +94,7 @@ private:
 	bool bStarted = false;
 	bool bContinuePressed = false;
 	bool bDraggingPlacement = false;
+	Vec2 PlacementGrab; // ghost centre minus the grabbed ground point, kept while dragging
 	float LastScreenHeight = 0.f;
 };
 

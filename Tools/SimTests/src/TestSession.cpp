@@ -7,6 +7,7 @@
 #include "BhProgress.h"
 #include "BhSerialize.h"
 #include "BhSession.h"
+#include "BhVisuals.h"
 
 using namespace bh;
 
@@ -31,6 +32,18 @@ public:
 	}
 	float GetScreenWidth() const override { return 1920.f; }
 	float GetScreenHeight() const override { return 1080.f; }
+};
+
+// Like the game camera: tilted, so height lifts a point up the screen (tests of screen picking).
+class ObliqueView : public TopDownView
+{
+public:
+	bool WorldToScreen(const Vec2& P, float Height, float& OutX, float& OutY) const override
+	{
+		OutX = (P.X - Origin.X) * Scale;
+		OutY = (P.Y - Origin.Y) * Scale - Height * Scale * 0.8f;
+		return true;
+	}
 };
 
 void Tap(Session& S, TopDownView& V, float X, float Y)
@@ -205,6 +218,55 @@ BH_TEST(Session_TouchFlow_SelectGatherBuild)
 	BH_EXPECT(S.GetControl().GetSelectionKind(W) == SelectionKind::OwnUnits);
 }
 
+BH_TEST(Tutorial_PlaceStepLightsThePlaceButton)
+{
+	// The "build a Cottage" step lights the way through every tap: Build, Cottage, then Place
+	// once the outline is on the map (a first-time player did not know how to finish).
+	Session S;
+	SessionConfig C;
+	C.MissionIndex = 0;
+	C.bTutorial = true;
+	std::string Err;
+	BH_EXPECT(S.Start(C, Err));
+	World& W = S.GetWorld();
+	TopDownView V;
+	const MissionDef& Def = GetMission(0);
+	int StepIndex = -1;
+	for (size_t I = 0; I < Def.Tutorial.size(); ++I)
+	{
+		StepIndex = std::string(Def.Tutorial[I].Highlight) == "place:Cottage" ? static_cast<int>(I) : StepIndex;
+	}
+	BH_EXPECT(StepIndex >= 0);
+	S.GetMission().TutorialIndex = StepIndex;
+	S.Update(0.01f, &V);
+	const Entity* Worker = FirstOwned(W, Archetype::Lamplighter);
+	BH_EXPECT(Worker != nullptr);
+	if (Worker == nullptr || StepIndex < 0)
+	{
+		return;
+	}
+	S.GetControl().SelectOne(W, Worker->Id);
+	auto Lit = [&S](ActionId Id)
+	{
+		HudModel Hud;
+		BuildHudModel(S, Hud);
+		for (const ActionButton& B : Hud.Actions)
+		{
+			if (B.Id == Id)
+			{
+				return B.bHighlight;
+			}
+		}
+		return false;
+	};
+	BH_EXPECT_MSG(Lit(ActionId(ActionKind::BuildMenu)), "Build is not lit");
+	S.ExecuteAction(ActionId(ActionKind::BuildMenu));
+	BH_EXPECT_MSG(Lit(ActionId(ActionKind::PlaceBuilding, static_cast<int>(Archetype::Cottage))), "Cottage is not lit");
+	S.ExecuteAction(ActionId(ActionKind::PlaceBuilding, static_cast<int>(Archetype::Cottage)));
+	BH_EXPECT(S.GetControl().bPlacing);
+	BH_EXPECT_MSG(Lit(ActionId(ActionKind::ConfirmPlacement)), "Place is not lit while placing the Cottage");
+}
+
 BH_TEST(Hud_HotkeysAvoidCameraKeys)
 {
 	// On desktop W, A, S and D pan the camera, so no command may use them as its shortcut, and
@@ -261,6 +323,168 @@ BH_TEST(Hud_HotkeysAvoidCameraKeys)
 		CheckActions(); // placement: confirm, cancel
 	}
 	BH_EXPECT(Checked >= 15);
+}
+
+BH_TEST(Session_TapsPickWhatIsDrawn)
+{
+	// Players tap the drawn body: a tower's top, a soldier's head. The ground under such a tap
+	// lies behind the object, so picking by the ground point alone missed tall buildings.
+	Session S;
+	SessionConfig C;
+	C.MissionIndex = 1;
+	C.bTutorial = false;
+	std::string Err;
+	BH_EXPECT(S.Start(C, Err));
+	World& W = S.GetWorld();
+	ObliqueView V;
+	V.Origin = Vec2(10.f, 10.f);
+	S.Update(0.05f, &V);
+	const EntityId Tower = W.SpawnBuilding(Archetype::Watchtower, Team::Player, Tile(30, 26), true);
+	const Entity* T = W.Find(Tower);
+	BH_EXPECT(T != nullptr);
+	if (T == nullptr)
+	{
+		return;
+	}
+	const ModelDef& M = GetModel(Archetype::Watchtower);
+	float X = 0.f;
+	float Y = 0.f;
+	V.WorldToScreen(T->Pos, M.Height * M.Scale * 0.9f, X, Y);
+	Tap(S, V, X, Y);
+	BH_EXPECT_MSG(S.GetControl().Selection.size() == 1 && S.GetControl().Selection[0] == Tower, "tapping the top of a Watchtower did not select it");
+
+	// A soldier standing in front of the Keep: its head selects it; the Keep's top selects the Keep.
+	const Entity* Keep = FirstOwned(W, Archetype::Keep);
+	BH_EXPECT(Keep != nullptr);
+	if (Keep == nullptr)
+	{
+		return;
+	}
+	const EntityId Guard = W.SpawnUnit(Archetype::Shieldbearer, Team::Player, Vec2(Keep->Pos.X, static_cast<float>(Keep->Rect.Y1) + 0.6f));
+	S.Update(0.05f, &V);
+	const Entity* G = W.Find(Guard);
+	const ModelDef& GM = GetModel(Archetype::Shieldbearer);
+	V.WorldToScreen(G->Pos, GM.Height * GM.Scale * 0.8f, X, Y);
+	Tap(S, V, X + 6.f, Y);
+	BH_EXPECT_MSG(S.GetControl().Selection.size() == 1 && S.GetControl().Selection[0] == Guard, "tapping a soldier's head did not select it");
+	const ModelDef& KM = GetModel(Archetype::Keep);
+	V.WorldToScreen(Keep->Pos, KM.Height * KM.Scale * 0.85f, X, Y);
+	Tap(S, V, X, Y);
+	BH_EXPECT_MSG(S.GetControl().Selection.size() == 1 && S.GetControl().Selection[0] == Keep->Id, "tapping the Keep's top did not select it (selected %zu, first %s)",
+		S.GetControl().Selection.size(), S.GetControl().Selection.empty() ? "-" : GetDef(W.Find(S.GetControl().Selection[0])->Type).Name);
+}
+
+BH_TEST(Session_TapBesideOwnUnitKeepsTheArmy)
+{
+	// With soldiers selected, a tap next to (not on) one of our own units is a move there. The
+	// finger-sized tolerance used to turn such taps into selecting that unit, dropping the army.
+	Session S;
+	SessionConfig C;
+	C.MissionIndex = 1;
+	C.bTutorial = false;
+	std::string Err;
+	BH_EXPECT(S.Start(C, Err));
+	World& W = S.GetWorld();
+	const GameMap& Map = W.GetMap();
+	const Entity* Keep = FirstOwned(W, Archetype::Keep);
+	BH_EXPECT(Keep != nullptr);
+	if (Keep == nullptr)
+	{
+		return;
+	}
+	// An open 9x9 patch of ground near the Keep.
+	Tile Open(-1, -1);
+	for (int R = 3; R < 20 && Open.X < 0; ++R)
+	{
+		for (int Dy = -R; Dy <= R && Open.X < 0; ++Dy)
+		{
+			for (int Dx = -R; Dx <= R && Open.X < 0; ++Dx)
+			{
+				const Tile T(Tile::FromPos(Keep->Pos).X + Dx, Tile::FromPos(Keep->Pos).Y + Dy);
+				bool bClear = true;
+				for (int Y = T.Y - 4; Y <= T.Y + 4 && bClear; ++Y)
+				{
+					for (int X = T.X - 4; X <= T.X + 4 && bClear; ++X)
+					{
+						bClear = Map.IsBuildableGround(X, Y);
+					}
+				}
+				Open = bClear ? T : Open;
+			}
+		}
+	}
+	BH_EXPECT(Open.X >= 0);
+	if (Open.X < 0)
+	{
+		return;
+	}
+	const Vec2 Spot = Open.Center();
+	const EntityId Worker = W.SpawnUnit(Archetype::Lamplighter, Team::Player, Spot);
+	const std::vector<EntityId> Army = {W.SpawnUnit(Archetype::Shieldbearer, Team::Player, Spot + Vec2(-3.f, 3.f)),
+		W.SpawnUnit(Archetype::Shieldbearer, Team::Player, Spot + Vec2(-2.f, 3.f))};
+	TopDownView V;
+	S.Update(0.05f, &V);
+	const Entity* Wk = W.Find(Worker);
+	const ModelDef& M = GetModel(Archetype::Lamplighter);
+	const float BodyPx = MaxF(Wk->Radius, M.ShadowRadius) * M.Scale * V.Scale;
+	const float X = Wk->Pos.X * V.Scale + BodyPx + 0.7f * PickRadiusScreen * V.GetScreenHeight(); // beside, not on it
+	const float Y = Wk->Pos.Y * V.Scale;
+	PlayerControl& Ctl = S.GetControl();
+	Ctl.SelectMany(W, Army);
+	Tap(S, V, X, Y);
+	BH_EXPECT_MSG(Ctl.Selection.size() == 2, "the army was dropped: %zu selected", Ctl.Selection.size());
+	for (EntityId Id : Army)
+	{
+		const Entity* E = W.Find(Id);
+		BH_EXPECT_MSG(E != nullptr && (E->Order == OrderType::Move || E->Order == OrderType::AttackMove), "a soldier was not ordered to move");
+	}
+	// Nothing selected: the same tap is generous and picks the worker.
+	Ctl.ClearSelection();
+	Tap(S, V, Wk->Pos.X * V.Scale + BodyPx + 0.7f * PickRadiusScreen * V.GetScreenHeight(), Wk->Pos.Y * V.Scale);
+	BH_EXPECT_MSG(Ctl.Selection.size() == 1 && Ctl.Selection[0] == Worker, "a tap beside a lone unit did not select it");
+	// With the army selected, a tap on the worker itself still selects it.
+	Ctl.SelectMany(W, Army);
+	Tap(S, V, Wk->Pos.X * V.Scale, Wk->Pos.Y * V.Scale);
+	BH_EXPECT_MSG(Ctl.Selection.size() == 1 && Ctl.Selection[0] == Worker, "a tap on our own unit did not select it");
+}
+
+BH_TEST(Session_PlacementDragKeepsTheGrab)
+{
+	// Dragging a building ghost moves it with the finger from wherever it was grabbed, instead of
+	// jumping its centre under the fingertip (where the finger would hide it).
+	Session S;
+	SessionConfig C;
+	C.MissionIndex = 1;
+	C.bTutorial = false;
+	std::string Err;
+	BH_EXPECT(S.Start(C, Err));
+	World& W = S.GetWorld();
+	TopDownView V;
+	S.Update(0.05f, &V);
+	const Entity* Worker = FirstOwned(W, Archetype::Lamplighter);
+	BH_EXPECT(Worker != nullptr);
+	if (Worker == nullptr)
+	{
+		return;
+	}
+	S.GetControl().SelectOne(W, Worker->Id);
+	S.GetControl().BeginPlacement(W, Archetype::Cottage, Worker->Pos + Vec2(3.f, 0.f));
+	BH_EXPECT(S.GetControl().bPlacing);
+	const TileRect Before = S.GetControl().PlacementRect();
+	const float X = (static_cast<float>(Before.X0) + 0.3f) * V.Scale;
+	const float Y = (static_cast<float>(Before.Y0) + 0.3f) * V.Scale;
+	S.PointerDown(0, X, Y, false);
+	S.Update(0.02f, &V);
+	for (int I = 1; I <= 10; ++I)
+	{
+		S.PointerMove(0, X + 16.f * static_cast<float>(I), Y + 8.f * static_cast<float>(I)); // 4 tiles right, 2 down
+		S.Update(0.02f, &V);
+	}
+	S.PointerUp(0, X + 160.f, Y + 80.f);
+	S.Update(0.02f, &V);
+	const TileRect After = S.GetControl().PlacementRect();
+	BH_EXPECT_MSG(S.GetControl().bPlacing && After.X0 == Before.X0 + 4 && After.Y0 == Before.Y0 + 2, "moved by %d,%d instead of 4,2", After.X0 - Before.X0,
+		After.Y0 - Before.Y0);
 }
 
 BH_TEST(Session_CameraPanAndPinch)
