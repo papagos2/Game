@@ -36,6 +36,7 @@ struct Run
 	Difficulty Diff = Difficulty::Normal;
 	BotConfig Bot;
 	float MaxSeconds = 45.f * 60.f;
+	int BoonRanks[NumBoons] = {};
 };
 
 std::vector<Run> BuildRuns()
@@ -97,6 +98,29 @@ std::vector<Run> BuildRuns()
 	Turtle.TowerCount = 6;
 	Turtle.bSmartEconomy = true;
 	Add("heart/normal/turtle", 2, Difficulty::Normal, Turtle);
+
+	// Progression: the strongest combat boons all Renown can buy (12: Hardy 3 and Keen 3), on Hard.
+	auto AddBoosted = [&Runs, &Add](const char* Name, int Mission, BotConfig Bot)
+	{
+		Add(Name, Mission, Difficulty::Hard, Bot);
+		Runs.back().BoonRanks[static_cast<int>(Boon::Hardy)] = MaxBoonRank;
+		Runs.back().BoonRanks[static_cast<int>(Boon::Keen)] = MaxBoonRank;
+	};
+	AddBoosted("dusk/hard/mixed-max-boons", 1, Dusk);
+	AddBoosted("heart/hard/mixed-max-boons", 2, Heart);
+	// A first try at Hard after three stars on every Normal mission (9 Renown): Hardy 2, Keen 2,
+	// and rank 1 of the other three.
+	auto AddFirstHard = [&Runs, &Add](const char* Name, int Mission, BotConfig Bot)
+	{
+		Add(Name, Mission, Difficulty::Hard, Bot);
+		const int Ranks[NumBoons] = {2, 2, 1, 1, 1};
+		for (int B = 0; B < NumBoons; ++B)
+		{
+			Runs.back().BoonRanks[B] = Ranks[B];
+		}
+	};
+	AddFirstHard("dusk/hard/mixed-9-renown", 1, Dusk);
+	AddFirstHard("heart/hard/mixed-9-renown", 2, Heart);
 	return Runs;
 }
 
@@ -329,6 +353,10 @@ int main(int Argc, char** Argv)
 			C.Diff = R.Diff;
 			C.bTutorial = R.Mission == 0;
 			C.Seed = static_cast<uint32_t>(Seed); // 0 is the game's own seed
+			for (int B = 0; B < NumBoons; ++B)
+			{
+				C.BoonRanks[B] = R.BoonRanks[B];
+			}
 			std::string Err;
 			if (!S.Start(C, Err))
 			{

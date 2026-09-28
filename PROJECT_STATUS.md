@@ -32,6 +32,12 @@ _Last updated: 2026-09-28 - stage: polish and hardening before the first build i
 - **Performance (this stage)**: spatial queries filter before sorting (same results, verified
   byte-identical over 51 games; 30-45% cheaper in big battles); path searches per tick capped at
   16 (the spike when a big army is ordered at once is a third lower); `bhplaytest --bench`.
+- **Clarity (this stage)**: per-unit "X ready" toasts (four in ten of all messages) replaced by
+  "<building> finished training" when a queue runs out; messages drop from 8-10 to 5-6 a
+  minute. "Under attack" is announced once per fight every 15 s, a raid elsewhere gets its own
+  alarm (it used to wait out the other fight's 15 s), and a fight in plain view raises no
+  alarm or banner (the minimap ping stays). Pinch zoom keeps the ground between the fingers
+  under them.
 
 ## Verified (in this environment, without Unreal)
 - **63 native tests** pass with clang (C++17) and g++ (C++20), strict warnings as errors, and
@@ -53,6 +59,10 @@ _Last updated: 2026-09-28 - stage: polish and hardening before the first build i
   | Heart Easy / Normal | 5/5 / 5/5 | 11 / 39 units lost |
   | Heart Hard | naive bot 9/15 | about 15 min, ~76 units lost |
   | Heart Normal by army | all 7 strategies 5/5 | Shieldbearer + Sage fastest (7:39); others 9-11 min |
+  | Hard with Boons (9 Renown = three stars on every Normal mission) | naive bot 15/15 on both | see Known risks |
+
+  The playtest also counts the messages a player would see: 5-6 a minute, at most 5 in 10 s,
+  almost never pushed off screen early.
 
 - **CPU budget** (`bhplaytest --bench`; one 2.1 GHz Xeon thread; a phone core is roughly 2-4x
   slower):
@@ -105,6 +115,11 @@ _Last updated: 2026-09-28 - stage: polish and hardening before the first build i
 - First compile in Unreal will surface API mismatches the stubs cannot catch.
 - Draw calls and per-frame component updates at ~100 units are unmeasured on devices; if too
   high, the fix is instanced unit bodies (a contained change in `BhWorldView`).
+- **Design question (Boons vs Hard)**: Hard sits right at the naive bot's threshold (Long Dusk
+  2/15, Heart 9/15), so the Boons a player owns after three-starring Normal (9 Renown) make both
+  Hard missions 15/15; even Boons 40% weaker still give 15/15. Weaker Boons would feel pointless
+  without restoring Hard's bite, so they are unchanged; players can reset Boons for a pure run.
+  Decide after human playtests (options: Hard scales Boons down, or a harder Hard).
 - Ordering a very large army across the map costs one 3-4 ms simulation tick on desktop
   (roughly one dropped frame at 60 fps on a mid-range phone); group paths would remove it.
 - Cooking all of `/Engine/EngineMaterials` adds download size until narrowed.
