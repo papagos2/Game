@@ -550,11 +550,15 @@ const char* CheckBlob(const SaveBlob& B)
 		{
 			bFlags = bFlags && BoolByte(R);
 		}
+		for (const Vec2& P : T.AlertPos)
+		{
+			bFlags = bFlags && Finite(P.X) && Finite(P.Y);
+		}
 		const TeamStats& St = T.Stats;
 		if (!bFlags || !InRange(T.Res[0], 0, 10000000) || !InRange(T.Res[1], 0, 10000000) || !InRange(T.SupplyUsed, 0, 100000) ||
 			!InRange(T.SupplyCap, 0, 100000) || !InRange(T.HpMult, 0.01f, 100.f) || !InRange(T.DamageMult, 0.01f, 100.f) ||
 			!InRange(T.GatherMult, 0.01f, 100.f) || !InRange(T.BuildTimeMult, 0.01f, 100.f) || !InRange(T.BuildingHpMult, 0.01f, 100.f) ||
-			!Finite(T.LastAlertTime) || !InRange(St.UnitsTrained, 0, 10000000) || !InRange(St.UnitsLost, 0, 10000000) || !InRange(St.Kills, 0, 10000000) ||
+			!Finite(T.AlertTime[0]) || !Finite(T.AlertTime[1]) || !Finite(T.AlertTime[2]) || !Finite(T.AlertTime[3]) || !InRange(St.UnitsTrained, 0, 10000000) || !InRange(St.UnitsLost, 0, 10000000) || !InRange(St.Kills, 0, 10000000) ||
 			!InRange(St.BuildingsBuilt, 0, 10000000) || !InRange(St.BuildingsLost, 0, 10000000) || !InRange(St.Gathered[0], 0, 1000000000) ||
 			!InRange(St.Gathered[1], 0, 1000000000))
 		{

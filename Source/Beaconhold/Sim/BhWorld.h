@@ -235,7 +235,9 @@ struct TeamState
 	float BuildTimeMult = 1.f;
 	float BuildingHpMult = 1.f;
 	bool bIgnoreSupply = false;
-	float LastAlertTime = -1000.f;
+	// Recent "under attack" alarms: each fight raises one every 15 s, a raid elsewhere its own.
+	float AlertTime[4] = {-1000.f, -1000.f, -1000.f, -1000.f};
+	Vec2 AlertPos[4];
 	TeamStats Stats;
 };
 

@@ -793,10 +793,22 @@ void World::ApplyDamage(Entity& Target, float Amount, EntityId SourceId, Team So
 
 	if (Target.Owner == Team::Player && SourceTeam == Team::Enemy)
 	{
+		// One alarm per fight every 15 s; a hit far from every recent alarm (a raid elsewhere)
+		// gets its own, at least 4 s after the last one.
 		TeamState& P = GetTeam(Team::Player);
-		if (Time - P.LastAlertTime > 15.f)
+		bool bKnownFight = false;
+		float Latest = -1000.f;
+		int Oldest = 0;
+		for (int I = 0; I < 4; ++I)
 		{
-			P.LastAlertTime = Time;
+			Latest = MaxF(Latest, P.AlertTime[I]);
+			bKnownFight = bKnownFight || (Time - P.AlertTime[I] <= 15.f && Vec2::Dist(Target.Pos, P.AlertPos[I]) <= 12.f);
+			Oldest = P.AlertTime[I] < P.AlertTime[Oldest] ? I : Oldest;
+		}
+		if (!bKnownFight && Time - Latest > 4.f)
+		{
+			P.AlertTime[Oldest] = Time;
+			P.AlertPos[Oldest] = Target.Pos;
 			EmitSimple(EventType::UnderAttack, Team::Player, Target.Pos, Target.Id, Target.Type);
 		}
 	}

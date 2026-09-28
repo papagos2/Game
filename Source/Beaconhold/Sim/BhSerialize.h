@@ -12,7 +12,7 @@ namespace bh
 {
 // Bump whenever the saved layout changes; saves of another version are refused (a suspended
 // mission from an older build is dropped, never misread).
-constexpr uint32_t SessionSaveVersion = 3;
+constexpr uint32_t SessionSaveVersion = 4;
 
 // Magic, version and a checksum of the rest: a save cut short or damaged on disk is refused.
 constexpr size_t SaveHeaderBytes = 16;

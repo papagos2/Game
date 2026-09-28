@@ -344,6 +344,58 @@ BH_TEST(World_RepeatedAttackTapsKeepSwinging)
 	BH_EXPECT_MSG(T == nullptr || T->Hp < T->MaxHp - 30.f, "only %.0f damage in 6 s of tapping", T != nullptr ? T->MaxHp - T->Hp : 0.f);
 }
 
+BH_TEST(World_RaidElsewhereRaisesItsOwnAlarm)
+{
+	// One alarm per fight every 15 s, but a raid on a far building must not wait out another
+	// fight's quiet time (the player may be watching that fight, where no alarm is shown).
+	World W;
+	W.Reset(48, 24, 1u);
+	const EntityId Near = W.SpawnBuilding(Archetype::Keep, Team::Player, Tile(3, 9), true);
+	const EntityId Far = W.SpawnBuilding(Archetype::Keep, Team::Player, Tile(40, 9), true);
+	const EntityId A = W.SpawnUnit(Archetype::Gloomling, Team::Enemy, Vec2(8.f, 11.f));
+	struct Alarm
+	{
+		Vec2 Pos;
+		float Time = 0.f;
+	};
+	std::vector<Alarm> Alarms;
+	auto Run = [&](float Seconds)
+	{
+		for (float T = 0.f; T < Seconds; T += World::TickSeconds)
+		{
+			W.Tick(World::TickSeconds);
+			for (const GameEvent& E : W.Events)
+			{
+				if (E.Type == EventType::UnderAttack)
+				{
+					Alarms.push_back(Alarm{E.Pos, W.GetTime()});
+				}
+			}
+			W.Events.clear();
+		}
+	};
+	W.CmdAttack({A}, Near);
+	Run(6.f);
+	BH_EXPECT_MSG(Alarms.size() == 1, "first fight: %zu alarms", Alarms.size());
+	const EntityId B = W.SpawnUnit(Archetype::Gloomling, Team::Enemy, Vec2(45.f, 11.f)); // the raid
+	W.CmdAttack({B}, Far);
+	Run(6.f);
+	BH_EXPECT_MSG(Alarms.size() == 2 && Alarms.back().Pos.X > 30.f, "a raid 36 tiles away raised %zu alarms in all", Alarms.size());
+	Run(30.f); // both fights go on (Keeps outlast them): each spot alarms again, never within 15 s
+	int NearCount = 0;
+	int FarCount = 0;
+	for (size_t I = 0; I < Alarms.size(); ++I)
+	{
+		(Alarms[I].Pos.X < 24.f ? NearCount : FarCount) += 1;
+		for (size_t J = I + 1; J < Alarms.size(); ++J)
+		{
+			const bool bSameSpot = (Alarms[I].Pos.X < 24.f) == (Alarms[J].Pos.X < 24.f);
+			BH_EXPECT_MSG(!bSameSpot || Alarms[J].Time - Alarms[I].Time > 15.f, "same fight alarmed at %.1f s and %.1f s", Alarms[I].Time, Alarms[J].Time);
+		}
+	}
+	BH_EXPECT_MSG(NearCount >= 2 && FarCount >= 2, "ongoing fights should be recalled every 15 s (%d near, %d far)", NearCount, FarCount);
+}
+
 BH_TEST(World_BlockedAttackerStrikesWhatIsInReach)
 {
 	// Ordered onto a target it cannot reach (across water), a soldier with an enemy at its side
