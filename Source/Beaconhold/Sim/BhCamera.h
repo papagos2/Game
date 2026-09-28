@@ -29,7 +29,8 @@ struct CameraRig
 	void Pan(const Vec2& WorldDelta);
 	void Fling(const Vec2& WorldVelocity);
 	void StopInertia();
-	void ZoomBy(float Factor);
+	// Wheel steps ease in; a pinch follows the fingers at once (bImmediate).
+	void ZoomBy(float Factor, bool bImmediate = false);
 	void SetZoomAlpha(float Alpha);
 	void JumpTo(const Vec2& P);
 	void Update(float Dt);

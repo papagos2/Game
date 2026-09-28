@@ -43,13 +43,17 @@ void CameraRig::StopInertia()
 	Velocity = Vec2();
 }
 
-void CameraRig::ZoomBy(float Factor)
+void CameraRig::ZoomBy(float Factor, bool bImmediate)
 {
 	if (Factor <= 0.f)
 	{
 		return;
 	}
 	TargetDistance = ClampF(TargetDistance * Factor, MinDistance, MaxDistance);
+	if (bImmediate)
+	{
+		Distance = TargetDistance;
+	}
 }
 
 void CameraRig::SetZoomAlpha(float Alpha)

@@ -267,6 +267,56 @@ BH_TEST(Tutorial_PlaceStepLightsThePlaceButton)
 	BH_EXPECT_MSG(Lit(ActionId(ActionKind::ConfirmPlacement)), "Place is not lit while placing the Cottage");
 }
 
+BH_TEST(Hud_TellsWhenTrainingStops)
+{
+	// Units appearing are seen and heard; the message worth sending is that a building has run
+	// out of orders. Per-unit "X ready" messages were four in ten of all messages in playtests.
+	Session S;
+	SessionConfig C;
+	C.MissionIndex = 1;
+	C.bTutorial = false;
+	std::string Err;
+	BH_EXPECT(S.Start(C, Err));
+	World& W = S.GetWorld();
+	const Entity* Keep = FirstOwned(W, Archetype::Keep);
+	BH_EXPECT(Keep != nullptr);
+	if (Keep == nullptr)
+	{
+		return;
+	}
+	W.GetTeam(Team::Player).Res[0] = 1000;
+	W.GetTeam(Team::Player).Res[1] = 1000;
+	W.GetTeam(Team::Player).bIgnoreSupply = true;
+	S.GetControl().SelectOne(W, Keep->Id);
+	S.ExecuteAction(ActionId(ActionKind::Train, static_cast<int>(Archetype::Lamplighter)));
+	S.ExecuteAction(ActionId(ActionKind::Train, static_cast<int>(Archetype::Lamplighter)));
+	std::vector<std::string> Texts;
+	int Trained = 0;
+	std::vector<GameEvent> Events;
+	for (int I = 0; I < 1200 && Trained < 2; ++I)
+	{
+		S.Update(World::TickSeconds, nullptr);
+		S.TakeEvents(Events);
+		for (const GameEvent& E : Events)
+		{
+			Trained += E.Type == EventType::UnitTrained ? 1 : 0;
+			Notice N;
+			if (MakeNotice(E, S, N))
+			{
+				Texts.push_back(N.Text);
+			}
+		}
+	}
+	BH_EXPECT_MSG(Trained == 2, "trained %d", Trained);
+	int Done = 0;
+	for (const std::string& T : Texts)
+	{
+		Done += T.find("finished training") != std::string::npos ? 1 : 0;
+		BH_EXPECT_MSG(T.find(" ready") == std::string::npos, "per-unit message: %s", T.c_str());
+	}
+	BH_EXPECT_MSG(Done == 1, "%d 'finished training' messages for one emptied queue", Done);
+}
+
 BH_TEST(Hud_HotkeysAvoidCameraKeys)
 {
 	// On desktop W, A, S and D pan the camera, so no command may use them as its shortcut, and
@@ -519,6 +569,67 @@ BH_TEST(Session_CameraPanAndPinch)
 	S.PointerUp(1, 1100.f, 500.f);
 	S.Update(0.02f, &V);
 	BH_EXPECT(S.GetCamera().TargetDistance < Dist);
+}
+
+BH_TEST(Session_PinchZoomsTowardsTheFingers)
+{
+	// Like a map app: the ground between the fingers stays under them while zooming, so zooming
+	// into a corner of the screen needs no extra drag. It used to zoom about the screen centre.
+	Session S;
+	SessionConfig C;
+	C.MissionIndex = 2;
+	C.bTutorial = false;
+	std::string Err;
+	BH_EXPECT(S.Start(C, Err));
+	// A projector that follows the live camera: tiles shrink on screen as the camera backs off.
+	class RigView : public IViewProjector
+	{
+	public:
+		const CameraRig* Rig = nullptr;
+		float Scale() const { return 800.f / Rig->Distance; }
+		bool ScreenToGround(float X, float Y, Vec2& Out) const override
+		{
+			Out = Rig->Focus + Vec2((X - 960.f) / Scale(), (Y - 540.f) / Scale());
+			return true;
+		}
+		bool WorldToScreen(const Vec2& P, float, float& OutX, float& OutY) const override
+		{
+			OutX = 960.f + (P.X - Rig->Focus.X) * Scale();
+			OutY = 540.f + (P.Y - Rig->Focus.Y) * Scale();
+			return true;
+		}
+		float GetScreenWidth() const override { return 1920.f; }
+		float GetScreenHeight() const override { return 1080.f; }
+	};
+	RigView V;
+	V.Rig = &S.GetCamera();
+	S.GetCamera().Focus = Vec2(32.f, 28.f);
+	S.GetCamera().Distance = S.GetCamera().TargetDistance = 30.f;
+	S.Update(0.02f, &V);
+	const float CX = 1250.f;
+	const float CY = 700.f;
+	Vec2 Before;
+	V.ScreenToGround(CX, CY, Before);
+	S.PointerDown(0, CX - 60.f, CY, false);
+	S.PointerDown(1, CX + 60.f, CY, false);
+	S.Update(0.02f, &V);
+	for (int I = 1; I <= 8; ++I)
+	{
+		const float Half = 60.f + 15.f * static_cast<float>(I); // fingers spread: zoom in
+		S.PointerMove(0, CX - Half, CY);
+		S.PointerMove(1, CX + Half, CY);
+		S.Update(0.02f, &V);
+	}
+	S.PointerUp(0, CX - 180.f, CY);
+	S.PointerUp(1, CX + 180.f, CY);
+	for (int I = 0; I < 30; ++I)
+	{
+		S.Update(0.02f, &V); // let the zoom settle
+	}
+	BH_EXPECT(S.GetCamera().Distance < 20.f);
+	Vec2 After;
+	V.ScreenToGround(CX, CY, After);
+	BH_EXPECT_MSG(Vec2::Dist(Before, After) < 0.5f, "the ground under the fingers drifted %.2f tiles", Vec2::Dist(Before, After));
 }
 
 BH_TEST(Session_NoticesAndSummary)

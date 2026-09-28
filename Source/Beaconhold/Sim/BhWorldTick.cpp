@@ -1357,6 +1357,8 @@ void World::CompleteProduction(Entity& Building, const ProductionItem& Item)
 	const Tile RallyTree = Building.RallyTree;
 	const Team Owner = Building.Owner;
 	const Vec2 BuildingPos = Building.Pos;
+	const EntityId BuildingId = Building.Id;
+	const bool bQueueDone = Building.Queue.empty();
 
 	const EntityId U = SpawnUnit(Item.Unit, Owner, SpawnAt.Center());
 	if (U == NoEntity)
@@ -1364,7 +1366,15 @@ void World::CompleteProduction(Entity& Building, const ProductionItem& Item)
 		return;
 	}
 	++T.Stats.UnitsTrained;
-	EmitSimple(EventType::UnitTrained, Owner, SpawnAt.Center(), U, Item.Unit);
+	GameEvent Trained;
+	Trained.Type = EventType::UnitTrained;
+	Trained.Owner = Owner;
+	Trained.Pos = SpawnAt.Center();
+	Trained.A = U;
+	Trained.B = BuildingId;
+	Trained.Arch = Item.Unit;
+	Trained.Sub = bQueueDone ? 1 : 0; // the building has nothing left to train
+	Emit(Trained);
 
 	const bool bWorker = GetDef(Item.Unit).IsWorker;
 	const std::vector<EntityId> One(1, U);

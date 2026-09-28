@@ -390,7 +390,7 @@ void PlayerControl::SmartCommand(World& W, const PickResult& Pick, const Vec2& P
 
 PickResult PlayerControl::PickOnScreen(const World& W, const IViewProjector& View, float X, float Y, const Vec2& Ground) const
 {
-	const float Tol = PickRadiusScreen * MaxF(1.f, View.GetScreenHeight());
+	const float Tol = PickRadiusScreen * MaxF(540.f, View.GetScreenHeight()); // as TapTolerance
 	EntityId BestUnit = NoEntity;
 	float BestUnitScore = 1e9f;
 	float BestUnitFeetY = 0.f;

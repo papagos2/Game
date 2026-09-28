@@ -5,6 +5,7 @@
 // same numbers come out whether a bot or a recorded input drives the session.
 #pragma once
 
+#include "BhHud.h"
 #include "BhSession.h"
 
 #include <map>
@@ -95,6 +96,13 @@ public:
 	std::vector<std::string> Violations;
 	int SaveChecks = 0; // suspend saves written, restored and compared
 
+	// Messages the player would see (MakeNotice, after the HUD's 3 s repeat filter).
+	int Notices = 0;
+	int PeakNoticesIn10s = 0;
+	float PeakNoticesAt = 0.f;
+	int NoticesPushedOut = 0; // toasts replaced before their time by newer ones (4 on screen)
+	std::map<std::string, int> NoticeCounts;
+
 	// CPU (milliseconds per simulation tick on this machine).
 	std::vector<float> TickMs;
 	float WorstTickMs = 0.f;
@@ -128,7 +136,17 @@ private:
 	void Sample(const bh::Session& S, float Dt);
 	void CheckInvariants(const bh::Session& S);
 	void CheckSaveRoundTrip(const bh::Session& S);
+	void ShowNotice(const bh::Notice& N, float Now);
 	void Violation(const std::string& Text);
+
+	struct Shown
+	{
+		std::string Text;
+		float Time = 0.f;
+	};
+	std::vector<Shown> RecentNotices; // the HUD drops a repeat of the same text within 3 s
+	std::vector<float> NoticeWindow;  // times of the notices in the last 10 s
+	std::vector<Shown> Toasts;        // on screen (4 at most, 3.5 s; danger 5 s)
 
 	std::map<bh::EntityId, bh::Archetype> TypeOf;
 	std::map<bh::EntityId, Tracker> Trackers;

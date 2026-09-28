@@ -58,6 +58,11 @@ void Telemetry::OnTick(const Session& S, const std::vector<GameEvent>& Events)
 	PeakEventsPerTick = MaxI(PeakEventsPerTick, static_cast<int>(Events.size()));
 	for (const GameEvent& E : Events)
 	{
+		Notice N;
+		if (MakeNotice(E, S, N))
+		{
+			ShowNotice(N, Now);
+		}
 		switch (E.Type)
 		{
 		case EventType::EntitySpawned:
@@ -162,6 +167,38 @@ void Telemetry::OnTick(const Session& S, const std::vector<GameEvent>& Events)
 		Sample(S, Now - LastSampleTime);
 		LastSampleTime = Now;
 		NextSample = Now + 1.f;
+	}
+}
+
+void Telemetry::ShowNotice(const Notice& N, float Now)
+{
+	// Mirrors the Unreal HUD: a repeat within 3 s is dropped; four toasts fit on screen.
+	RecentNotices.erase(std::remove_if(RecentNotices.begin(), RecentNotices.end(), [Now](const Shown& R) { return Now - R.Time >= 3.f; }),
+		RecentNotices.end());
+	for (const Shown& R : RecentNotices)
+	{
+		if (R.Text == N.Text)
+		{
+			return;
+		}
+	}
+	RecentNotices.push_back(Shown{N.Text, Now});
+	++Notices;
+	++NoticeCounts[N.Text];
+	NoticeWindow.erase(std::remove_if(NoticeWindow.begin(), NoticeWindow.end(), [Now](float T) { return Now - T >= 10.f; }), NoticeWindow.end());
+	NoticeWindow.push_back(Now);
+	if (static_cast<int>(NoticeWindow.size()) > PeakNoticesIn10s)
+	{
+		PeakNoticesIn10s = static_cast<int>(NoticeWindow.size());
+		PeakNoticesAt = Now;
+	}
+	const float Life = N.Severity == NoticeSeverity::Danger ? 5.f : 3.5f;
+	Toasts.erase(std::remove_if(Toasts.begin(), Toasts.end(), [Now](const Shown& T) { return Now >= T.Time; }), Toasts.end());
+	Toasts.push_back(Shown{N.Text, Now + Life}); // Time holds when it expires
+	if (Toasts.size() > 4)
+	{
+		Toasts.erase(Toasts.begin());
+		++NoticesPushedOut;
 	}
 }
 
@@ -493,6 +530,24 @@ std::string Telemetry::Summary() const
 		"    health: stuck %zu, invariant violations %zu, save round trips %d | peaks: units %d vs %d, entities %d, projectiles %d, events/tick %d\n", Stuck.size(),
 		Violations.size(), SaveChecks, PeakPlayerUnits, PeakEnemyUnits, PeakEntities, PeakProjectiles, PeakEventsPerTick);
 	Out += Buf;
+	{
+		std::vector<std::pair<int, std::string>> Top;
+		for (const auto& Pair : NoticeCounts)
+		{
+			Top.emplace_back(Pair.second, Pair.first);
+		}
+		std::sort(Top.begin(), Top.end(), [](const std::pair<int, std::string>& A, const std::pair<int, std::string>& B) { return A.first > B.first; });
+		const float Minutes = MaxF(Duration / 60.f, 0.01f);
+		std::snprintf(Buf, sizeof(Buf), "    messages: %d (%.1f a minute), at most %d in 10 s (at %s), %d pushed off early; most:", Notices,
+			static_cast<float>(Notices) / Minutes, PeakNoticesIn10s, FormatTime(PeakNoticesAt).c_str(), NoticesPushedOut);
+		Out += Buf;
+		for (size_t I = 0; I < Top.size() && I < 4; ++I)
+		{
+			std::snprintf(Buf, sizeof(Buf), " \"%s\" x%d;", Top[I].second.c_str(), Top[I].first);
+			Out += Buf;
+		}
+		Out += "\n";
+	}
 	for (size_t I = 0; I < Stuck.size() && I < 6; ++I)
 	{
 		const StuckIncident& K = Stuck[I];

@@ -319,9 +319,17 @@ void Session::RouteGesture(const GestureEvent& E, const IViewProjector& View)
 		break;
 	case GestureType::Pinch:
 	{
+		Vec2 Anchor;
+		const bool bAnchor = View.ScreenToGround(E.X, E.Y, Anchor);
 		if (E.Scale > 0.01f)
 		{
-			Camera.ZoomBy(1.f / E.Scale);
+			const float Before = Camera.TargetDistance;
+			Camera.ZoomBy(1.f / E.Scale, true);
+			// Zoom towards the fingers: the ground between them keeps its place on screen.
+			if (bAnchor && Before > 0.f)
+			{
+				Camera.Pan((Anchor - Camera.Focus) * (1.f - Camera.TargetDistance / Before));
+			}
 		}
 		Vec2 Prev;
 		Vec2 Cur;

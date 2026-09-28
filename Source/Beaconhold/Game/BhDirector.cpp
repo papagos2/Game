@@ -842,7 +842,9 @@ void ABhDirector::HandleEvent(const bh::GameEvent& E)
 		PlayWorldCue(Cue, E.Pos);
 	}
 	bh::Notice N;
-	if (bh::MakeNotice(E, *Session, N))
+	// An attack in plain view needs no message or banner; the minimap ping below still shows it.
+	const bool bAttackInView = E.Type == bh::EventType::UnderAttack && IsOnScreen(E.Pos, -1.5f);
+	if (!bAttackInView && bh::MakeNotice(E, *Session, N))
 	{
 		PushNotice(N);
 	}

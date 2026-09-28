@@ -248,15 +248,21 @@ bool MakeNotice(const GameEvent& E, const Session& S, Notice& Out)
 		Out.IconId = E.Arch != Archetype::None ? GetDef(E.Arch).IconId : Icon::Build;
 		return true;
 	case EventType::UnitTrained:
-		if (!bMine || E.Arch == Archetype::Lamplighter)
+	{
+		// New units are seen and heard as they appear; what the player needs to know is that a
+		// building has run out of orders (unless more were queued since).
+		const Entity* Building = S.GetWorld().Find(E.B);
+		if (!bMine || E.Sub != 1 || Building == nullptr || !Building->bAlive || !Building->Queue.empty())
 		{
 			return false;
 		}
-		Out.Text = std::string(ArchName) + " ready";
+		Out.Text = std::string(GetDef(Building->Type).Name) + " finished training";
 		Out.Severity = NoticeSeverity::Info;
 		Out.bHasPos = true;
+		Out.Pos = Building->Pos;
 		Out.IconId = GetDef(E.Arch).IconId;
 		return true;
+	}
 	case EventType::ResearchCompleted:
 		if (!bMine)
 		{
