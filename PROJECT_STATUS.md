@@ -100,7 +100,9 @@ _Last updated: 2026-09-28 - stage: polish and hardening before the first build i
 ## Unreal-only checks remaining (first run)
 1. Compile the module in UE 5.8 (expect a short fix round).
 2. World visible and facing outward (else flip `bReverseTriangleWinding`); colours as in preview.
-3. Menus, HUD and command card lay out correctly at phone and tablet aspect ratios and safe areas.
+3. Menus, HUD and command card lay out correctly at phone and tablet aspect ratios and safe areas;
+   text is sharp on high-density screens (render scale comes from the engine's device profiles,
+   `r.MobileContentScaleFactor`).
 4. Touch: tap, drag-pan, pinch, long-press box, minimap; mouse and keyboard on desktop. Check
    that taps on tall buildings and on soldiers' heads select them (screen picking).
 5. Audio plays (music cross-fade, effects), and stops cleanly on exit.
@@ -123,7 +125,9 @@ _Last updated: 2026-09-28 - stage: polish and hardening before the first build i
 - Ordering a very large army across the map costs one 3-4 ms simulation tick on desktop
   (roughly one dropped frame at 60 fps on a mid-range phone); group paths would remove it.
 - Cooking all of `/Engine/EngineMaterials` adds download size until narrowed.
-- Package/bundle ids are placeholders; no app icon or launch screen yet.
+- Package/bundle ids are placeholders; no app icon or launch screen yet. Before a store release:
+  Google Play wants an app bundle and a current target SDK level (check the UE 5.8 Android
+  settings then).
 - Desktop Shipping builds keep the engine tone mapper, so colours differ slightly there.
 
 ## Decisions
