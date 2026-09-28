@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#0d0b10" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <title>Ashenveil</title>
+    <link rel="icon" href="./icon.svg" />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="view"></canvas>
+      <div id="touch"></div>
+      <div id="joy"><div id="joyKnob"></div></div>
+      <div id="plates"></div>
+
+      <div id="hud" hidden>
+        <div id="playerFrame" class="frame">
+          <div class="portrait" id="pPortrait"></div>
+          <div class="frameBody">
+            <div class="frameName"><span id="pName"></span><span class="lvl" id="pLevel"></span></div>
+            <div class="bar hp"><div class="fill" id="pHp"></div><div class="shield" id="pShield"></div><span id="pHpText"></span></div>
+            <div class="bar res" id="pResBar"><div class="fill" id="pRes"></div><span id="pResText"></span></div>
+            <div class="buffs" id="pBuffs"></div>
+          </div>
+        </div>
+
+        <div id="targetFrame" class="frame" hidden>
+          <div class="frameBody">
+            <div class="frameName"><span id="tName"></span><span class="lvl" id="tLevel"></span></div>
+            <div class="bar hp"><div class="fill" id="tHp"></div><span id="tHpText"></span></div>
+            <div class="tSub" id="tSub"></div>
+          </div>
+        </div>
+
+        <div id="topRight">
+          <div id="minimapWrap">
+            <canvas id="minimap" width="150" height="150"></canvas>
+            <div id="zoneName"></div>
+          </div>
+          <div id="menuButtons">
+            <button class="round" id="btnBag" aria-label="Bag and character"><span>Bag</span></button>
+            <button class="round" id="btnQuests" aria-label="Quest log"><span>Quests</span></button>
+            <button class="round" id="btnMenu" aria-label="Menu"><span>Menu</span></button>
+          </div>
+        </div>
+
+        <div id="tracker"></div>
+
+        <div id="actionBar"></div>
+        <button id="talkBtn" class="pill" hidden>Talk</button>
+
+        <div id="xpBar"><div id="xpFill"></div><span id="xpText"></span></div>
+        <div id="message"></div>
+        <div id="banner"></div>
+        <div id="toasts"></div>
+      </div>
+
+      <div id="screens"></div>
+      <div id="rotateHint"><div>Turn your device sideways to play</div></div>
+    </div>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

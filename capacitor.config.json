@@ -1,0 +1,13 @@
+{
+  "appId": "com.papagos.ashenveil",
+  "appName": "Ashenveil",
+  "webDir": "dist",
+  "backgroundColor": "#0d0b10",
+  "android": {
+    "backgroundColor": "#0d0b10"
+  },
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#0d0b10"
+  }
+}

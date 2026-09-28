@@ -1,9 +1,0 @@
-{
-  "name": "beaconhold-preview",
-  "private": true,
-  "description": "Approximate WebGL preview of Beaconhold scenes exported from the simulation core (art direction / framing checks).",
-  "type": "module",
-  "dependencies": {
-    "three": "0.170.0"
-  }
-}
